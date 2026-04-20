@@ -1,0 +1,156 @@
+\documentclass[preprint,12pt]{elsarticle}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+
+\journal{}
+
+\input{figures/analysis_stats.tex}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Ternary Encoding of Genomic Variants as Audible Gabor Atoms: A MCORE-1 Framework Applied to GJB2 Hearing Loss Mutations}
+
+\author{Jacob Walker}
+\address{Symonic LLC, Simpsonville, SC, United States}
+
+\begin{abstract}
+Binary clinical genomics compresses molecular evidence into discrete calls---wildtype versus pathogenic, present versus absent---and in doing so discards conjugate structure that is not representable in a two-state measurement basis. This work treats DNA as a discrete signal, encodes it in the MCORE-1 ternary algebra, and maps each trit state to a minimum-uncertainty Gabor atom at 48\,kHz. Using the RefSeq transcript NM\_004004.6 coding sequence for \textit{GJB2} (Connexin 26) and two recurrent pathogenic deletions (c.35delG and c.235delC), we compare aggregate trit count distributions to the wildtype distribution using chi-square goodness-of-fit tests. For the present encoding and deletion model, neither variant rejects the null of identical trit proportions ($\chi^2=\ChiSqCThirtyFive$, $p=\ensuremath{\PCThirtyFive}$ for c.35delG; $\chi^2=\ChiSqCTwoThirtyFive$, $p=\ensuremath{\PCTwoThirtyFive}$ for c.235delC; df$=2$). Despite this near-degeneracy at the level of global histograms, prefix-aligned MCORE-1 delta sequences exhibit extensive position-wise disagreement after independent re-encoding, indicating that local ternary state---and therefore the induced click-train audio---can diverge from wildtype even when bulk counts remain similar. The synthesis atoms satisfy the Gabor uncertainty inequality for the reported second-moment bandwidth measures. Together, these results motivate ternary measurement as a complementary representation: it is not guaranteed to separate variants in every marginal summary statistic, but it provides a disciplined route to represent genomic edits in a physically grounded acoustic basis.
+\end{abstract}
+
+\begin{keyword}
+MCORE-1 \sep ternary encoding \sep GJB2 \sep Connexin 26 \sep sonification \sep Gabor limit \sep uncertainty principle \sep genomic signal processing
+\end{keyword}
+
+\end{frontmatter}
+
+\section{Introduction}
+
+Clinical and screening genomics increasingly relies on categorical variant interpretation: a site is called pathogenic or benign, a carrier status is present or absent, an allele is detected or not. This binarization is operationally necessary, but it is not information-neutral. Many biochemical degrees of freedom---rates, occupancies, cooperative transitions---are projected away when the final readout is forced into two labels. The MCORE-1 construction used here is motivated by a narrower and more formal claim: a three-valued algebraic state can represent carry-augmented structure in a DNA scan that a bit-wise alphabet cannot preserve without auxiliary bookkeeping.
+
+GJB2 (Connexin 26) is an appropriate stress test for any ``extra state'' hypothesis because it is both medically central and densely characterized: common recessive alleles recur at high frequency in defined populations, and the reference coding sequence is available from public databases \citep{lee2009connexin26,mese2007gap,ncbi_nm004004}. The present manuscript does not assert clinical utility; it asks a preliminary signal-processing question: if DNA is encoded into a ternary stream and mapped into Gabor atoms, what statistical signatures appear at the level of (i) global trit histograms, (ii) local delta structure along the coding sequence, and (iii) time-frequency localization of the synthesis primitives?
+
+Time-frequency analysis is not imported for metaphor. Gabor's theory of communication establishes Gaussian-modulated complex exponentials as the unique family that saturates the classical bandwidth-duration product \citep{gabor1946theory}. The same inequality class appears in quantum measurement, where non-commuting observables impose joint-resolution limits \citep{heisenberg1927anschaulichen}. Human listeners can, under some paradigms, outperform naive Fourier-style bounds \citep{oppenheim2013human}; the point for this work is more conservative: the sonification basis is chosen so that each trit label is realized as a band-limited transient whose second moments are internally consistent with a stated uncertainty bound.
+
+\section{Theoretical framework}
+
+\subsection{MCORE-1 trit algebra}
+
+Let the DNA alphabet be scanned 5$'$ to 3$'$. MCORE-1 assigns base values in $\mathbb{Z}$ and propagates a carry. With base values $A\!\rightarrow\!0$, $C\!\rightarrow\!1$, $G\!\rightarrow\!2$, and $T\!\rightarrow\!0$ plus an additional increment that implements a $T$-biased carry, each base contributes a provisional sum that is reduced modulo 3 to emit a trit in $\{0,1,2\}$ while updating the carry for the next position. Concretely, if $v(b)$ is the integer base value, $c_i$ is the carry entering position $i$, and $\epsilon_T(b)$ is 1 if $b=T$ and 0 otherwise, then
+\begin{equation}
+  u_i = v(b_i) + c_i + \epsilon_T(b_i), \qquad t_i = u_i \bmod 3, \qquad c_{i+1} = \left\lfloor u_i/3\right\rfloor .
+\end{equation}
+The emitted sequence $(t_i)$ is the object mapped to audio. Algebraicly, the scan is a joint dynamics between a visible trit and a hidden carry; pathogenic edits that preserve base composition can still perturb the carry trajectory and therefore the emitted trits.
+
+\subsection{Gabor limit in acoustic space}
+
+For a square-integrable pulse $g(t)$, define time and frequency spreads via second moments of energy. With appropriate normalization, the classical inequality can be written as
+\begin{equation}
+  \sigma_t \,\sigma_f \;\ge\; \frac{1}{4\pi},
+\end{equation}
+where $\sigma_t$ and $\sigma_f$ are root-mean-squared durations in seconds and Hertz. Gaussian envelopes modulated by a carrier achieve equality in the continuum idealization. Digital synthesis at finite sample rate introduces discretization; the verification reported below therefore uses zero-padding to approximate continuum bandwidth while keeping the underlying waveform identical.
+
+\subsection{Why Gabor atoms}
+
+Gabor atoms are mathematically distinguished as minimizers (or near-minimizers under digital constraints) of joint time-frequency uncertainty for a fixed bandwidth budget. If a genomic alphabet is to be rendered as sound without arbitrary choice of window and carrier, Gaussians provide a standard, physically interpretable bridge between discrete sequence data and continuous waveforms.
+
+\subsection{Delta representation}
+
+Given wildtype and mutant DNA strings, this study compares MCORE-1 trits after independent re-encoding of an aligned prefix of length $n=\min(L_{\mathrm{wt}},L_{\mathrm{mut}})$. Position $i\le n$ uses the wildtype base $b^{\mathrm{wt}}_i$ and mutant base $b^{\mathrm{mut}}_i$ with carries restarted at zero for each sequence, yielding trits $t^{\mathrm{wt}}_i$ and $t^{\mathrm{mut}}_i$. The modular delta is
+\begin{equation}
+  \Delta_i = \bigl(t^{\mathrm{mut}}_i - t^{\mathrm{wt}}_i\bigr) \bmod 3 .
+\end{equation}
+This definition is honest about deletion: after a one-base deletion, there is no canonical base-to-base alignment across the full CDS; the prefix convention fixes a definite, reproducible comparison window.
+
+\section{Methods}
+
+\subsection{Reference sequence}
+
+NM\_004004.6 was retrieved from NCBI using E-utilities \citep{ncbi_nm004004}. The coding sequence was extracted from the GenBank CDS annotation (join 179..859 on the RefSeq record as retrieved in 2026), yielding 681 coding bases beginning with ATG.
+
+\subsection{Variants}
+
+We modeled c.35delG (rs80338943) and c.235delC (rs80338939) as single-nucleotide deletions at the corresponding 1-indexed CDS coordinates \citep{clinvar_rs80338943,clinvar_rs80338939}. These variants are recurrent in population genetics studies of hearing loss; clinical interpretation is not revisited here.
+
+\subsection{Trit encoding and audio synthesis}
+
+Encoding, deletion application, and waveform rendering follow the reference implementation in \texttt{code/gjb2\_sonification.py}. Audio is generated at 48\,kHz with 40\,ms per trit and an 8\,ms Gaussian $\sigma$, mapping trits $\{0,1,2\}$ to carrier frequencies $\{800,1600,3200\}$\,Hz.
+
+\subsection{Statistical analysis}
+
+For each sequence, MCORE-1 trits were counted in $\{0,1,2\}$. For each variant, Pearson's chi-square goodness-of-fit test compared observed trit counts to expected counts proportional to the wildtype distribution, scaled to the mutant length (680 trits after a one-base deletion). Degrees of freedom are 2; significance is reported at $\alpha=0.05$ \citep{agresti2013categorical}.
+
+\subsection{Delta density}
+
+Prefix-aligned deltas $\Delta_i$ were converted to a binary indicator $I_i=\mathbb{1}[\Delta_i\neq 0]$ and smoothed with a length-10 moving average to visualize local density of mutation-affected trits along the CDS index $i$.
+
+\subsection{Gabor uncertainty check}
+
+For each trit label, the discrete \texttt{gabor\_click} waveform was energy-normalized, zero-padded to a 2\,s window at 48\,kHz, and second moments $\sigma_t$ and $\sigma_f$ were computed in time and frequency from the padded energy distribution. Products $\sigma_t\sigma_f$ were compared to $1/(4\pi)$.
+
+\subsection{Reproducibility}
+
+Code, figures, and audio are available at \url{https://github.com/vortexpixelz/gjb2-mcore-sonification}. Running \texttt{python code/analysis.py} regenerates the figure files and the LaTeX fragments under \texttt{paper/figures/}.
+
+\section{Results}
+
+\subsection{Trit distributions}
+
+Figure~\ref{fig:trit} summarizes trit frequencies for wildtype and both deletions. The chi-square tests do not reject the null of identical multinomial proportions for either variant at $\alpha=0.05$ (c.35delG: $\chi^2=\ChiSqCThirtyFive$, $p=\ensuremath{\PCThirtyFive}$; c.235delC: $\chi^2=\ChiSqCTwoThirtyFive$, $p=\ensuremath{\PCTwoThirtyFive}$). Table~\ref{tab:summary} lists the underlying counts.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.72\linewidth]{figures/trit_distributions.png}
+  \caption{Normalized MCORE-1 trit histograms for NM\_004004.6 CDS (wildtype) and for c.35delG and c.235delC deletion alleles.}
+  \label{fig:trit}
+\end{figure}
+
+\input{figures/summary_table.tex}
+
+\subsection{Delta signal density}
+
+Figure~\ref{fig:delta} overlays rolling-window densities of non-zero prefix-aligned deltas for both variants. Despite the aggregate histogram similarity, hundreds of positions exhibit non-zero modular differences within the aligned prefix, reflecting carry-sensitive divergence between independently re-encoded streams.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/delta_density.png}
+  \caption{Prefix-aligned MCORE-1 delta density along the CDS (10-trit rolling mean of the non-zero indicator).}
+  \label{fig:delta}
+\end{figure}
+
+\subsection{Gabor atom uncertainty}
+
+Figure~\ref{fig:gabor} shows example time-domain atoms, log-magnitude spectrograms, and time-frequency boxes sized by $(\sigma_t,\sigma_f)$ for each trit carrier. For the padded second-moment estimator used here, each product satisfies $\sigma_t\sigma_f\ge 1/(4\pi)$.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/gabor_atoms.png}
+  \caption{Synthesis atoms for trits $\{0,1,2\}$ at 48\,kHz. Each row shows the waveform, a spectrogram, and the uncertainty box in the time-frequency plane.}
+  \label{fig:gabor}
+\end{figure}
+
+\section{Discussion}
+
+The central statistical result is negative in the narrow sense of global trit histograms: under MCORE-1 encoding, deleting one base at either hotspot does not materially change the $\{0,1,2\}$ frequency split relative to wildtype for this transcript. That outcome is compatible with the deletion being locally concentrated while the majority of the CDS remains unchanged, so aggregate counts are nearly stable.
+
+The delta-density analysis nonetheless shows that local trit trajectories can diverge widely under independent re-encoding, even when histograms match. In other words, marginal sufficiency fails: a three-bin histogram is not a complete summary of the mutation's effect on the carry-augmented scan. For sonification, what matters is the time-ordered trit stream that drives the Gabor click train; that stream is not determined by the histogram alone.
+
+The acoustic mapping is therefore best understood as a measurement model: each trit selects a band-limited atom in a perceptually separated frequency triplet (800/1600/3200\,Hz). The uncertainty verification ties that choice to standard time-frequency physics rather than ad hoc sound design.
+
+Limitations are explicit. MCORE-1 carry is sensitive to boundary conditions; prefix alignment for deltas is a modeling choice, not a statement about biological homology after frameshift. This is a single-gene demonstration. Finally, human auditory performance can violate naive Fourier uncertainty benchmarks in psychophysical tasks \citep{oppenheim2013human}; the present construction is about synthesis basis properties, not perceptual discrimination thresholds.
+
+\section{Conclusion}
+
+MCORE-1 trit encoding combined with Gabor-atom synthesis provides a reproducible, physically grounded route from DNA edits to audio. For the two classic GJB2 deletions studied here, aggregate trit histograms remain statistically similar to wildtype, while prefix-aligned deltas reveal extensive local disagreement in the ternary scan. This pattern illustrates how ternary representations can retain positional structure that coarse binary summaries---and even low-dimensional count summaries---may obscure.
+
+\section*{Acknowledgments}
+The author thanks the NCBI for maintaining public access to NM\_004004.6 and the ClinVar database for variant clinical significance annotations.
+
+\bibliographystyle{elsarticle-num}
+\bibliography{references}
+
+\end{document}
