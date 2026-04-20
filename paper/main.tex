@@ -32,7 +32,7 @@ MCORE-1 \sep ternary encoding \sep GJB2 \sep Connexin 26 \sep sonification \sep 
 
 Clinical and screening genomics increasingly relies on categorical variant interpretation: a site is called pathogenic or benign, a carrier status is present or absent, an allele is detected or not. This binarization is operationally necessary, but it is not information-neutral. Many biochemical degrees of freedom---rates, occupancies, cooperative transitions---are projected away when the final readout is forced into two labels. The MCORE-1 construction used here is motivated by a narrower and more formal claim: a three-valued algebraic state can represent carry-augmented structure in a DNA scan that a bit-wise alphabet cannot preserve without auxiliary bookkeeping.
 
-GJB2 (Connexin 26) is an appropriate stress test for any ``extra state'' hypothesis because it is both medically central and densely characterized: common recessive alleles recur at high frequency in defined populations, and the reference coding sequence is available from public databases \citep{lee2009connexin26,mese2007gap,ncbi_nm004004}. The present manuscript does not assert clinical utility; it asks a preliminary signal-processing question: if DNA is encoded into a ternary stream and mapped into Gabor atoms, what statistical signatures appear at the level of (i) global trit histograms, (ii) localized windows around pathogenic breakpoints, (iii) carry-mediated downstream divergence between aligned trit trajectories, and (iv) time-frequency localization of the synthesis primitives?
+GJB2 (Connexin 26) is an appropriate stress test for any ``extra state'' hypothesis because it is both medically central and densely characterized: common recessive alleles recur at high frequency in defined populations, and the reference coding sequence is available from public databases \citep{beach2020gjb2,mese2007gap,ncbi_nm004004}. Ternary measurement is also a natural language for cytosine modification states in recent epigenomic atlases \citep{goldberg2025ternary}. The present manuscript does not assert clinical utility; it asks a preliminary signal-processing question: if DNA is encoded into a ternary stream and mapped into Gabor atoms, what statistical signatures appear at the level of (i) global trit histograms, (ii) localized windows around pathogenic breakpoints, (iii) carry-mediated downstream divergence between aligned trit trajectories, and (iv) time-frequency localization of the synthesis primitives?
 
 Time-frequency analysis is not imported for metaphor. Gabor's theory of communication establishes Gaussian-modulated complex exponentials as the unique family that saturates the classical bandwidth-duration product \citep{gabor1946theory}. The same inequality class appears in quantum measurement, where non-commuting observables impose joint-resolution limits \citep{heisenberg1927anschaulichen}. Human listeners can, under some paradigms, outperform naive Fourier-style bounds \citep{oppenheim2013human}; the point for this work is more conservative: the sonification basis is chosen so that each trit label is realized as a band-limited transient whose second moments are internally consistent with a stated uncertainty bound.
 
@@ -74,7 +74,7 @@ NM\_004004.6 was retrieved from NCBI using E-utilities \citep{ncbi_nm004004}. Th
 
 \subsection{Variants}
 
-We modeled c.35delG (rs80338943) and c.235delC (rs80338939) as single-nucleotide deletions at the corresponding 1-indexed CDS coordinates \citep{clinvar_rs80338943,clinvar_rs80338939}. These variants are recurrent in population genetics studies of hearing loss; clinical interpretation is not revisited here.
+We modeled c.35delG (rs80338943) and c.235delC (rs80338939) as single-nucleotide deletions at the corresponding 1-indexed CDS coordinates \citep{clinvar_rs80338943,clinvar_rs80338939,landrum2016clinvar}. These variants are recurrent in population genetics studies of hearing loss; clinical interpretation is not revisited here.
 
 \subsection{Trit encoding and audio synthesis}
 
@@ -82,7 +82,7 @@ Encoding, deletion application, and waveform rendering follow the reference impl
 
 \subsection{Statistical analysis}
 
-For each sequence, MCORE-1 trits were counted in $\{0,1,2\}$. For each variant, Pearson's chi-square goodness-of-fit test compared observed trit counts to expected counts proportional to the wildtype distribution, scaled to the mutant length (680 trits after a one-base deletion). Degrees of freedom are 2; significance is reported at $\alpha=0.05$ \citep{agresti2013categorical}.
+For each sequence, MCORE-1 trits were counted in $\{0,1,2\}$. For each variant, Pearson's chi-square goodness-of-fit test compared observed trit counts to expected counts proportional to the wildtype distribution, scaled to the mutant length (680 trits after a one-base deletion). Degrees of freedom are 2; significance is reported at $\alpha=0.05$ \citep{agresti2002categorical}.
 
 \subsection{Positional window contrast}
 
@@ -168,6 +168,8 @@ Limitations are explicit. Prefix alignment with independent re-encoding is a rep
 
 The carry cascade observed here is not a bug of the encoding---it is the feature. A single-nucleotide deletion propagates through $\sim$61\% of downstream trit positions because carry state is a form of sequential memory. Binary encodings of the same deletion carry no such downstream signal without explicit auxiliary state. This is precisely the $S_3$ term: information present in the ternary representation that binary measurement architecturally excludes.
 
+Prior approaches to genomic sonification have mapped bases directly to musical notes (Temple, 2017~\citep{temple2017dna}) or used pitch detuning to represent genetic load (Martin et al., 2024~\citep{martin2024genomic}). Neither approach encodes pathogenicity state, nor do they produce signals sensitive to downstream carry propagation from single-nucleotide variants. The MCORE-1 framework differs in three respects: ternary state encoding captures information beyond binary present/absent classification; carry propagation produces a sequential signal extending $\sim$61\% of positions downstream of the deletion site; and Gabor atom synthesis grounds the acoustic representation in the minimum-uncertainty basis of signal theory.
+
 \section{Conclusion}
 
 MCORE-1 trit encoding combined with Gabor-atom synthesis provides a reproducible, physically grounded route from DNA edits to audio. For the two classic GJB2 deletions studied here, aggregate trit frequencies stay near wildtype while carry-mediated trajectory divergence produces extensive downstream disagreement in aligned trit streams. That separation between marginal histogram invariance and sequential sensitivity is the main empirical point: ternary measurement can represent variant impact in a dynamical channel that binary summaries do not natively expose.
@@ -175,6 +177,7 @@ MCORE-1 trit encoding combined with Gabor-atom synthesis provides a reproducible
 \section*{Acknowledgments}
 The author thanks the NCBI for maintaining public access to NM\_004004.6 and the ClinVar database for variant clinical significance annotations.
 
+\nocite{gu2021baab047}
 \bibliographystyle{elsarticle-num}
 \bibliography{references}
 
