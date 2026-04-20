@@ -166,6 +166,8 @@ The acoustic mapping is best understood as a measurement model: each emitted tri
 
 Limitations are explicit. Prefix alignment with independent re-encoding is a reproducible convention, not a claim about reading-frame repair in vivo. MCORE-1 carry is sensitive to boundary conditions. This is a single-gene demonstration. Finally, human auditory performance can violate naive Fourier uncertainty benchmarks in psychophysical tasks \citep{oppenheim2013human}; the present construction is about synthesis basis properties, not perceptual discrimination thresholds.
 
+The carry cascade observed here is not a bug of the encoding---it is the feature. A single-nucleotide deletion propagates through $\sim$61\% of downstream trit positions because carry state is a form of sequential memory. Binary encodings of the same deletion carry no such downstream signal without explicit auxiliary state. This is precisely the $S_3$ term: information present in the ternary representation that binary measurement architecturally excludes.
+
 \section{Conclusion}
 
 MCORE-1 trit encoding combined with Gabor-atom synthesis provides a reproducible, physically grounded route from DNA edits to audio. For the two classic GJB2 deletions studied here, aggregate trit frequencies stay near wildtype while carry-mediated trajectory divergence produces extensive downstream disagreement in aligned trit streams. That separation between marginal histogram invariance and sequential sensitivity is the main empirical point: ternary measurement can represent variant impact in a dynamical channel that binary summaries do not natively expose.
