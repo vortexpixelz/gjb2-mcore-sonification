@@ -1,47 +1,29 @@
 # gjb2-mcore-sonification
 
-This repository accompanies a working manuscript on MCORE-1 ternary encoding of the GJB2 (Connexin 26) coding sequence and Gabor-atom sonification of wildtype and common pathogenic deletion alleles. It includes reproducible Python analysis, generated figures for the LaTeX paper, and rendered WAV audio aligned with the synthesis parameters in `code/gjb2_sonification.py`.
+Monorepo for **MCORE-1** trit encoding, **Gabor** sonification, and the GJB2 paper stack.
 
-## Installation
+| Directory | Purpose |
+|-----------|---------|
+| **`first/`** | **Iteration 1 (frozen case study):** NM\_004004.6 GJB2 paper, `code/`, `paper/`, `audio/`, root `gjb2_sonification.py`, `AGENTS.md`, theory PDF under `first/docs/`. |
+| **`second/`** | **Iteration 2 (next build):** shared **core** library, CLI or batch runners for **other datasets**, tests—grow here instead of editing `first/`. |
+| **`agent-shop/`** | **Agent ergonomics:** prompts, checklists, and notes for Cursor/cloud agents (skills, MCP, reproducibility) scoped to this repo. |
 
-```bash
-pip install -r code/requirements.txt
-```
-
-Python 3.10 or newer is required.
-
-## Reproduce the paper figures and table fragments
+## Quick start (iteration 1)
 
 ```bash
-python code/analysis.py
+pip install -r first/code/requirements.txt
+python first/code/analysis.py
+cd first/paper && pdflatex main.tex && bibtex main && pdflatex main.tex && pdflatex main.tex
 ```
 
-Then compile the manuscript:
+Audio engine (writes to `OUTPUT_DIR` in the script, default `/mnt/user-data/outputs`):
 
 ```bash
-cd paper
-pdflatex main.tex
-bibtex main
-pdflatex main.tex
-pdflatex main.tex
+python first/code/gjb2_sonification.py
 ```
 
-## Reproduce the audio
+Reference WAVs are committed under `first/audio/`.
 
-```bash
-python code/gjb2_sonification.py
-```
+## License & contact
 
-Rendered WAV files are written to the path configured as `OUTPUT_DIR` in `code/gjb2_sonification.py` (by default `/mnt/user-data/outputs`). Committed reference copies live under `audio/`.
-
-## Data
-
-NM\_004004.6 is fetched live from NCBI via E-utilities when you run the scripts; no local FASTA file is required for reproduction.
-
-## License
-
-MIT
-
-## Contact
-
-jacob@symonic.com
+MIT · jacob@symonic.com

@@ -203,6 +203,15 @@ paper/*.out
 paper/*.pdf
 paper/*.toc
 paper/*.spl
+first/paper/*.aux
+first/paper/*.bbl
+first/paper/*.blg
+first/paper/*.log
+first/paper/*.out
+first/paper/*.pdf
+first/paper/*.toc
+first/paper/*.spl
+second/**/__pycache__/
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

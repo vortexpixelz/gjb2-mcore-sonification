@@ -2,6 +2,9 @@
 # Autonomous build instructions for Cursor / OpenAI Codex agents
 # Author: Jacob Walker / Symonic LLC
 # Goal: Produce a complete, submission-ready academic paper + reproducible codebase
+#
+# Repository note: this iteration lives under `first/` at the repo root. Treat paths
+# below as relative to `first/` (e.g. `first/code/`, `first/paper/`).
  
 ---
  

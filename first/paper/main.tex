@@ -78,7 +78,7 @@ We modeled c.35delG (rs80338943) and c.235delC (rs80338939) as single-nucleotide
 
 \subsection{Trit encoding and audio synthesis}
 
-Encoding, deletion application, and waveform rendering follow the reference implementation in \texttt{code/gjb2\_sonification.py}. Audio is generated at 48\,kHz with 40\,ms per trit and an 8\,ms Gaussian $\sigma$, mapping trits $\{0,1,2\}$ to carrier frequencies $\{800,1600,3200\}$\,Hz.
+Encoding, deletion application, and waveform rendering follow the reference implementation in \texttt{first/code/gjb2\_sonification.py}. Audio is generated at 48\,kHz with 40\,ms per trit and an 8\,ms Gaussian $\sigma$, mapping trits $\{0,1,2\}$ to carrier frequencies $\{800,1600,3200\}$\,Hz.
 
 \subsection{Statistical analysis}
 
@@ -102,7 +102,7 @@ For each trit label, the discrete \texttt{gabor\_click} waveform was energy-norm
 
 \subsection{Reproducibility}
 
-Code, figures, and audio are available at \url{https://github.com/vortexpixelz/gjb2-mcore-sonification}. Running \texttt{python code/analysis.py} regenerates the figure files and the LaTeX fragments under \texttt{paper/figures/}.
+Code, figures, and audio are available at \url{https://github.com/vortexpixelz/gjb2-mcore-sonification}. Running \texttt{python first/code/analysis.py} regenerates the figure files and the LaTeX fragments under \texttt{first/paper/figures/}.
 
 \section{Results}
 

@@ -21,8 +21,9 @@ from scipy.signal import spectrogram
 # Paths & reproducibility
 # -----------------------------------------------------------------------------
 CODE_DIR = Path(__file__).resolve().parent
-REPO_ROOT = CODE_DIR.parent
-FIG_DIR = REPO_ROOT / "paper" / "figures"
+# This iteration lives under first/ at the repository root.
+FIRST_DIR = CODE_DIR.parent
+FIG_DIR = FIRST_DIR / "paper" / "figures"
 
 if str(CODE_DIR) not in sys.path:
     sys.path.insert(0, str(CODE_DIR))
