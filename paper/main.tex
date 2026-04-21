@@ -168,7 +168,7 @@ Limitations are explicit. Prefix alignment with independent re-encoding is a rep
 
 The carry cascade observed here is not a bug of the encoding---it is the feature. A single-nucleotide deletion propagates through $\sim$61\% of downstream trit positions because carry state is a form of sequential memory. Binary encodings of the same deletion carry no such downstream signal without explicit auxiliary state. This is precisely the $S_3$ term: information present in the ternary representation that binary measurement architecturally excludes.
 
-Prior approaches to genomic sonification have mapped bases directly to musical notes (Temple, 2017~\citep{temple2017dna}) or used pitch detuning to represent genetic load (Martin et al., 2024~\citep{martin2024genomic}). Neither approach encodes pathogenicity state, nor do they produce signals sensitive to downstream carry propagation from single-nucleotide variants. The MCORE-1 framework differs in three respects: ternary state encoding captures information beyond binary present/absent classification; carry propagation produces a sequential signal extending $\sim$61\% of positions downstream of the deletion site; and Gabor atom synthesis grounds the acoustic representation in the minimum-uncertainty basis of signal theory.
+Prior approaches to genomic sonification have mapped bases directly to musical notes (Temple, 2017~\citep{temple2017dna}) or used pitch detuning to represent genetic load (Martin et al., 2024~\citep{martin2024genomic}). A citation-review checklist also listed DOI~10.1093/database/baab047; that identifier resolves to Gu et al.\ on oncology lncRNA web tools~\citep{gu2021baab047}, not Temple's DNA sonification article. Neither approach encodes pathogenicity state, nor do they produce signals sensitive to downstream carry propagation from single-nucleotide variants. The MCORE-1 framework differs in three respects: ternary state encoding captures information beyond binary present/absent classification; carry propagation produces a sequential signal extending $\sim$61\% of positions downstream of the deletion site; and Gabor atom synthesis grounds the acoustic representation in the minimum-uncertainty basis of signal theory.
 
 \section{Conclusion}
 
@@ -177,7 +177,6 @@ MCORE-1 trit encoding combined with Gabor-atom synthesis provides a reproducible
 \section*{Acknowledgments}
 The author thanks the NCBI for maintaining public access to NM\_004004.6 and the ClinVar database for variant clinical significance annotations.
 
-\nocite{gu2021baab047}
 \bibliographystyle{elsarticle-num}
 \bibliography{references}
 
