@@ -4,7 +4,13 @@ This folder is the **first** complete deliverable: manuscript, analysis, audio, 
 
 ## Install
 
-From repository root:
+From repository root, prefer the repo bootstrap (`.venv` + core + Jupyter):
+
+```bash
+./scripts/bootstrap_env.sh && source .venv/bin/activate
+```
+
+Or install only analysis dependencies:
 
 ```bash
 pip install -r first/code/requirements.txt

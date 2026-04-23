@@ -8,6 +8,20 @@ Monorepo for **MCORE-1** trit encoding, **Gabor** sonification, and the GJB2 pap
 | **`second/`** | **Iteration 2 (next build):** shared **core** library, CLI or batch runners for **other datasets**, tests—grow here instead of editing `first/`. |
 | **`agent-shop/`** | **Agent ergonomics:** prompts, checklists, and notes for Cursor/cloud agents (skills, MCP, reproducibility) scoped to this repo. |
 
+## Python environment (recommended)
+
+Creates **`.venv`** with **Python 3.12** when available (falls back to `python3`), then installs **`first/code/requirements.txt`** and **`requirements-jupyter.txt`**.
+
+```bash
+chmod +x scripts/bootstrap_env.sh   # once, if needed
+./scripts/bootstrap_env.sh
+source .venv/bin/activate
+```
+
+Override the interpreter: `PYTHON312=python3 ./scripts/bootstrap_env.sh`
+
+On Debian/Ubuntu, if `python3.12 -m venv` fails: `sudo apt install python3.12-venv`
+
 ## Quick start (iteration 1)
 
 ```bash

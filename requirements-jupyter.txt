@@ -1,0 +1,4 @@
+# Jupyter stack for notebooks / cloud agents (install after first/code/requirements.txt)
+# Pin only top-level packages; pip resolves the rest.
+jupyterlab==4.3.5
+ipykernel==6.29.5

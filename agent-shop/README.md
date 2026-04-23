@@ -17,3 +17,4 @@ Lightweight **operator notes** for humans and autonomous agents working in this 
 
 - Original build spec: `first/AGENTS.md`
 - Repo map: root `README.md`
+- **Env bootstrap:** run `scripts/bootstrap_env.sh` from repo root (Python 3.12 `.venv`, `first/code/requirements.txt` + `requirements-jupyter.txt`).
