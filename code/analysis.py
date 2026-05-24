@@ -98,6 +98,30 @@ def _window_chisquare_homogeneity(wt_trits: list[int], mut_trits: list[int], sta
     return float(chi2), float(p)
 
 
+def _plain_frameshift_stats(
+    wt_dna: str,
+    mut_dna: str,
+    deletion_pos_1: int,
+) -> dict[str, float | int]:
+    """Prefix-aligned nucleotide comparison at the same 1-based index (frameshift naive)."""
+    n = min(len(wt_dna), len(mut_dna))
+    diffs = [i + 1 for i in range(n) if wt_dna[i] != mut_dna[i]]
+    first = int(diffs[0]) if diffs else -1
+    total = len(diffs)
+    after = [i for i in diffs if i > deletion_pos_1]
+    n_after = len(after)
+    tail_len = max(0, n - deletion_pos_1)
+    dens_after = (n_after / tail_len) if tail_len > 0 else 0.0
+    return {
+        "first_diff_1based": first,
+        "total_diff": total,
+        "n_diff_after_site": n_after,
+        "tail_len_after_site": tail_len,
+        "density_after_site": dens_after,
+        "n_aligned": n,
+    }
+
+
 def _carry_propagation_stats(
     wt_trits: list[int],
     mut_trits: list[int],
@@ -279,11 +303,13 @@ def main() -> None:
         wstart = _centered_window_start(center, window_w, n)
         chi_w, p_w = _window_chisquare_homogeneity(wt_p, mut_p, wstart, window_w)
         cp = _carry_propagation_stats(wt_p, mut_p, del_pos_1)
+        fs = _plain_frameshift_stats(wt_dna, mut_dna, del_pos_1)
         return {
             "window_start": wstart,
             "window_chi2": chi_w,
             "window_p": p_w,
-            **cp,
+            **{f"carry_{k}": v for k, v in cp.items()},
+            **{f"plain_{k}": v for k, v in fs.items()},
         }
 
     pos_results = {
@@ -306,9 +332,10 @@ def main() -> None:
     ):
         r = pos_results[key]
         print(
-            f"  {name}: first_diff={r['first_diff_1based']}, total_diff={r['total_diff']}, "
-            f"diff_after_site_{dpos}={r['n_diff_after_site']}/{r['tail_len_after_site']}, "
-            f"density_after={r['density_after_site']:.6f}"
+            f"  {name}: first_diff={r['carry_first_diff_1based']}, total_diff={r['carry_total_diff']}, "
+            f"diff_after_site_{dpos}={r['carry_n_diff_after_site']}/{r['carry_tail_len_after_site']}, "
+            f"MCORE_density_after={r['carry_density_after_site']:.6f}, "
+            f"plain_frameshift_density_after={r['plain_density_after_site']:.6f}"
         )
 
     # --- 2a: trit distributions ---
@@ -359,11 +386,23 @@ def main() -> None:
         exp_i = int(exp)
         return f"{mant} \\times 10^{{{exp_i}}}"
 
-    def row_tex(name: str, bp_len: int, ctr: np.ndarray, chi2: str, pval: str) -> str:
+    def row_tex(
+        name: str,
+        bp_len: int,
+        ctr: np.ndarray,
+        chi2: str,
+        pval: str,
+        plain_dens: str,
+        carry_dens: str,
+    ) -> str:
         pcol = "---" if pval == "---" else f"${pval}$"
         return (
-            f"{name} & {bp_len} & {int(ctr[0])} & {int(ctr[1])} & {int(ctr[2])} & {chi2} & {pcol} \\\\\n"
+            f"{name} & {bp_len} & {int(ctr[0])} & {int(ctr[1])} & {int(ctr[2])} & "
+            f"{chi2} & {pcol} & {plain_dens} & {carry_dens} \\\\\n"
         )
+
+    r35 = pos_results["c35"]
+    r235 = pos_results["c235"]
 
     table_path = FIG_DIR / "summary_table.tex"
     with open(table_path, "w", encoding="utf-8") as f:
@@ -371,24 +410,50 @@ def main() -> None:
         f.write("\\begin{table}[t]\n")
         f.write("\\centering\n")
         f.write("\\label{tab:summary}\n")
-        f.write("\\caption{Trit distribution statistics for GJB2 wildtype and pathogenic variants}\n")
-        f.write("\\begin{tabular}{lrrrrrr}\n")
+        f.write(
+            "\\caption{Trit distribution statistics for GJB2 wildtype and pathogenic variants. "
+            "Downstream mismatch densities $\\rho$ count disagreements strictly after the deletion "
+            "coordinate under prefix alignment: plain frameshift compares nucleotides at the same "
+            "index; MCORE carry compares independently re-encoded trits.}\n"
+        )
+        f.write("\\begin{tabular}{lrrrrrrrr}\n")
         f.write("\\hline\n")
         f.write(
-            "Sequence & Length (bp) & Trit 0 & Trit 1 & Trit 2 & $\\chi^2$ vs WT & $p$-value \\\\\n"
+            "Sequence & Length (bp) & Trit 0 & Trit 1 & Trit 2 & $\\chi^2$ vs WT & $p$-value & "
+            "Plain frameshift $\\rho$ & MCORE carry $\\rho$ \\\\\n"
         )
         f.write("\\hline\n")
-        f.write(row_tex("Wildtype (NM\\_004004.6 CDS)", len(wt), c_wt, "---", "---"))
-        f.write(row_tex("c.35delG", len(c35), c35_c, f"{chi_c35:.4f}", fmt_p_latex(float(p_c35))))
-        f.write(row_tex("c.235delC", len(c235), c235_c, f"{chi_c235:.4f}", fmt_p_latex(float(p_c235))))
+        f.write(
+            row_tex("Wildtype (NM\\_004004.6 CDS)", len(wt), c_wt, "---", "---", "---", "---")
+        )
+        f.write(
+            row_tex(
+                "c.35delG",
+                len(c35),
+                c35_c,
+                f"{chi_c35:.4f}",
+                fmt_p_latex(float(p_c35)),
+                f"{r35['plain_density_after_site']:.3f}",
+                f"{r35['carry_density_after_site']:.3f}",
+            )
+        )
+        f.write(
+            row_tex(
+                "c.235delC",
+                len(c235),
+                c235_c,
+                f"{chi_c235:.4f}",
+                fmt_p_latex(float(p_c235)),
+                f"{r235['plain_density_after_site']:.3f}",
+                f"{r235['carry_density_after_site']:.3f}",
+            )
+        )
         f.write("\\hline\n")
         f.write("\\end{tabular}\n")
         f.write("\\end{table}\n")
 
     # Persist numeric results for LaTeX \\input (optional)
     stats_tex = FIG_DIR / "analysis_stats.tex"
-    r35 = pos_results["c35"]
-    r235 = pos_results["c235"]
     with open(stats_tex, "w", encoding="utf-8") as f:
         f.write("% Auto-generated by code/analysis.py\n")
         f.write(f"\\newcommand{{\\ChiSqCThirtyFive}}{{{chi_c35:.6f}}}\n")
@@ -405,16 +470,18 @@ def main() -> None:
         f.write(f"\\newcommand{{\\WinLoCTwoThirtyFive}}{{{int(r235['window_start'])}}}\n")
         f.write(f"\\newcommand{{\\WinHiCTwoThirtyFive}}{{{int(r235['window_start']) + window_w - 1}}}\n")
         # Carry propagation (prefix-aligned)
-        f.write(f"\\newcommand{{\\FirstDiffCThirtyFive}}{{{int(r35['first_diff_1based'])}}}\n")
-        f.write(f"\\newcommand{{\\TotalDiffCThirtyFive}}{{{int(r35['total_diff'])}}}\n")
-        f.write(f"\\newcommand{{\\DiffAfterCThirtyFive}}{{{int(r35['n_diff_after_site'])}}}\n")
-        f.write(f"\\newcommand{{\\TailAfterCThirtyFive}}{{{int(r35['tail_len_after_site'])}}}\n")
-        f.write(f"\\newcommand{{\\DensAfterCThirtyFive}}{{{r35['density_after_site']:.3f}}}\n")
-        f.write(f"\\newcommand{{\\FirstDiffCTwoThirtyFive}}{{{int(r235['first_diff_1based'])}}}\n")
-        f.write(f"\\newcommand{{\\TotalDiffCTwoThirtyFive}}{{{int(r235['total_diff'])}}}\n")
-        f.write(f"\\newcommand{{\\DiffAfterCTwoThirtyFive}}{{{int(r235['n_diff_after_site'])}}}\n")
-        f.write(f"\\newcommand{{\\TailAfterCTwoThirtyFive}}{{{int(r235['tail_len_after_site'])}}}\n")
-        f.write(f"\\newcommand{{\\DensAfterCTwoThirtyFive}}{{{r235['density_after_site']:.3f}}}\n")
+        f.write(f"\\newcommand{{\\PlainDensCThirtyFive}}{{{r35['plain_density_after_site']:.3f}}}\n")
+        f.write(f"\\newcommand{{\\PlainDensCTwoThirtyFive}}{{{r235['plain_density_after_site']:.3f}}}\n")
+        f.write(f"\\newcommand{{\\FirstDiffCThirtyFive}}{{{int(r35['carry_first_diff_1based'])}}}\n")
+        f.write(f"\\newcommand{{\\TotalDiffCThirtyFive}}{{{int(r35['carry_total_diff'])}}}\n")
+        f.write(f"\\newcommand{{\\DiffAfterCThirtyFive}}{{{int(r35['carry_n_diff_after_site'])}}}\n")
+        f.write(f"\\newcommand{{\\TailAfterCThirtyFive}}{{{int(r35['carry_tail_len_after_site'])}}}\n")
+        f.write(f"\\newcommand{{\\DensAfterCThirtyFive}}{{{r35['carry_density_after_site']:.3f}}}\n")
+        f.write(f"\\newcommand{{\\FirstDiffCTwoThirtyFive}}{{{int(r235['carry_first_diff_1based'])}}}\n")
+        f.write(f"\\newcommand{{\\TotalDiffCTwoThirtyFive}}{{{int(r235['carry_total_diff'])}}}\n")
+        f.write(f"\\newcommand{{\\DiffAfterCTwoThirtyFive}}{{{int(r235['carry_n_diff_after_site'])}}}\n")
+        f.write(f"\\newcommand{{\\TailAfterCTwoThirtyFive}}{{{int(r235['carry_tail_len_after_site'])}}}\n")
+        f.write(f"\\newcommand{{\\DensAfterCTwoThirtyFive}}{{{r235['carry_density_after_site']:.3f}}}\n")
 
     # Console summary for Gabor verification
     print("\nGabor atom uncertainty (normalized click trains)")
