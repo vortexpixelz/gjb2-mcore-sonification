@@ -19,7 +19,9 @@ from mcore1_bridge import (  # noqa: E402
     export_to_json,
     resolve_tree_backend,
     run_parametric_cascade,
+    verify_encoder_parity,
 )
+from mcore1_upstream import MCORE1_RC_TAG, load_mcore_1  # noqa: E402
 
 
 def main() -> None:
@@ -41,20 +43,55 @@ def main() -> None:
         metavar="K",
         help="Print cascade certificate for deletion at 1-based position K",
     )
+    parser.add_argument(
+        "--verify-encoder",
+        action="store_true",
+        help="Compare gjb2_sonification vs mcore_1.encoder on NM_004004.6",
+    )
+    parser.add_argument(
+        "--deletion-check",
+        type=int,
+        metavar="K",
+        help="Run mcore_1.check_deletion for position K (requires vendor install)",
+    )
     args = parser.parse_args()
 
-    build_tree, check_tree, backend = resolve_tree_backend()
-    print(f"Tree backend: {backend}")
+    label, rc_tag = resolve_tree_backend()
+    print(f"Backend: {label}")
+    if rc_tag:
+        print(f"Upstream RC tag: {rc_tag}")
+    else:
+        print(f"Paper cites upstream tag: {MCORE1_RC_TAG} (install vendor/mcore-1)")
+
+    if args.verify_encoder:
+        wt = fetch_gjb2_cds()
+        ok, msg = verify_encoder_parity(wt)
+        print(msg)
+        if not ok:
+            raise SystemExit(1)
+
+    if args.deletion_check is not None:
+        upstream = load_mcore_1()
+        if upstream is None or upstream.check_deletion is None:
+            print("check_deletion requires: pip install -e vendor/mcore-1")
+            raise SystemExit(1)
+        wt = fetch_gjb2_cds()
+        cert = cascade_certificate(wt, args.deletion_check)
+        print(f"deletion_check_ok={cert.deletion_check_ok}")
+        if cert.deletion_check_errors:
+            print("errors:", ", ".join(cert.deletion_check_errors[:12]))
+        raise SystemExit(0 if cert.deletion_check_ok else 1)
 
     if args.cascade_only is not None:
         wt = fetch_gjb2_cds()
-        cert = cascade_certificate(wt, args.cascade_only, build_tree=build_tree, check_tree=check_tree)
+        cert = cascade_certificate(wt, args.cascade_only)
         print(
             f"c.{args.cascade_only} deletion: "
             f"first_diff={cert.first_diff_1based} "
             f"carry_rho={cert.carry_density_after:.3f} "
             f"plain_rho={cert.plain_density_after:.3f} "
-            f"tree_ok=({cert.tree_wt_ok},{cert.tree_mut_ok})"
+            f"tree_ok=({cert.tree_wt_ok},{cert.tree_mut_ok}) "
+            f"deletion_check_ok={cert.deletion_check_ok}"
         )
         return
 
@@ -63,14 +100,15 @@ def main() -> None:
     export_to_json(args.json, export)
     print(f"Wrote {args.json}")
 
-    for label in ("c.35del", "c.235del"):
-        if label not in export.cascades:
+    for label_key in ("c.35del", "c.235del"):
+        if label_key not in export.cascades:
             continue
-        c = export.cascades[label]
+        c = export.cascades[label_key]
         print(
-            f"{label}: carry_rho={c.carry_density_after:.3f} "
+            f"{label_key}: carry_rho={c.carry_density_after:.3f} "
             f"plain_rho={c.plain_density_after:.3f} "
-            f"first_diff={c.first_diff_1based}"
+            f"first_diff={c.first_diff_1based} "
+            f"deletion_check_ok={c.deletion_check_ok}"
         )
 
     if args.parametric:

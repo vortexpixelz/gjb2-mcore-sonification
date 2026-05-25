@@ -12,14 +12,15 @@ pip install -r code/requirements.txt
 
 Python 3.10 or newer is required.
 
-## MCORE-1 integration (tree check + cascade certificate)
+## MCORE-1 integration (`mcore_1` package)
 
 ```bash
 python code/mcore1_integration.py
+python code/mcore1_integration.py --verify-encoder   # after pip install -e vendor/mcore-1
 python -m unittest tests.test_mcore1_integration -v
 ```
 
-Optional upstream checker: clone [mcore-1](https://github.com/vortexpixelz/mcore-1) into `vendor/mcore-1` (see [docs/MCORE1.md](docs/MCORE1.md)).
+Install upstream checker: [docs/HANDOFF_FROM_MCORE1.md](docs/HANDOFF_FROM_MCORE1.md) and [docs/MCORE1.md](docs/MCORE1.md). Pin tag **`mcore-1-v0.2-review-candidate`**.
 
 ## Reproduce the paper figures and table fragments
 

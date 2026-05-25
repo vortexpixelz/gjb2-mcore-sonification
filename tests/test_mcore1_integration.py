@@ -1,4 +1,4 @@
-"""MCORE-1 ↔ GJB2 integration tests (local tree backend; no vendor required)."""
+"""MCORE-1 ↔ GJB2 integration tests."""
 
 from __future__ import annotations
 
@@ -14,8 +14,22 @@ from mcore1_bridge import (  # noqa: E402
     cascade_certificate,
     run_parametric_cascade,
     scan_bundle,
+    verify_encoder_parity,
 )
 from mcore1_local import build_metrical_tree, check_tree  # noqa: E402
+from mcore1_upstream import node_results_to_errors  # noqa: E402
+
+
+class _FakeNode:
+    def __init__(self, valid: bool, errors: list) -> None:
+        self.valid = valid
+        self.errors = errors
+
+
+class TestNodeResultParsing(unittest.TestCase):
+    def test_invalid_rows_become_error_codes(self) -> None:
+        rows = [_FakeNode(False, ["CONSERVATION"]), _FakeNode(True, [])]
+        self.assertEqual(node_results_to_errors(rows), ["CONSERVATION"])
 
 
 class TestMetricalTreeLocal(unittest.TestCase):
@@ -25,9 +39,10 @@ class TestMetricalTreeLocal(unittest.TestCase):
         self.assertEqual(check_tree(root), [])
 
     def test_scan_bundle_local_backend(self) -> None:
-        bundle = scan_bundle("ATGCATG", build_tree=build_metrical_tree, check_tree=check_tree, backend="local")
+        bundle = scan_bundle("ATGCATG")
         self.assertTrue(bundle.tree_ok)
         self.assertEqual(bundle.backend, "local")
+        self.assertEqual(bundle.encoder, "gjb2_sonification")
         self.assertEqual(len(bundle.trits), 7)
 
 
@@ -41,11 +56,9 @@ def _fetch_wt_or_skip(testcase: unittest.TestCase) -> str:
 
 
 class TestCascadeCertificate(unittest.TestCase):
-    """Cascade metrics on live NM_004004.6 (skipped when offline)."""
-
     def test_carry_rho_below_plain_c35(self) -> None:
         wt = _fetch_wt_or_skip(self)
-        cert = cascade_certificate(wt, 35, build_tree=build_metrical_tree, check_tree=check_tree)
+        cert = cascade_certificate(wt, 35)
         self.assertLess(cert.carry_density_after, cert.plain_density_after)
         self.assertGreater(cert.carry_density_after, 0.4)
         self.assertTrue(cert.tree_wt_ok and cert.tree_mut_ok)
@@ -54,20 +67,26 @@ class TestCascadeCertificate(unittest.TestCase):
         wt = _fetch_wt_or_skip(self)
         results = run_parametric_cascade(wt, k_min=1, k_max=30)
         self.assertEqual(len(results), 30)
-        n_ok = 0
-        for r in results:
-            if r.carry_density_after < r.plain_density_after and r.carry_density_after > 0.35:
-                n_ok += 1
+        n_ok = sum(
+            1
+            for r in results
+            if r.carry_density_after < r.plain_density_after and r.carry_density_after > 0.35
+        )
         self.assertGreaterEqual(n_ok, 25, f"only {n_ok}/30 positions show carry < plain with rho>0.35")
+
+    def test_encoder_parity_when_mcore_1_installed(self) -> None:
+        wt = _fetch_wt_or_skip(self)
+        ok, msg = verify_encoder_parity(wt)
+        if "skipped" in msg:
+            return
+        self.assertTrue(ok, msg)
 
 
 class TestGjb2ReferencePositions(unittest.TestCase):
-    """Paper Table 1 reference positions (live NCBI)."""
-
     def test_c35_and_c235_match_paper_ordering(self) -> None:
         wt = _fetch_wt_or_skip(self)
-        c35 = cascade_certificate(wt, 35, build_tree=build_metrical_tree, check_tree=check_tree)
-        c235 = cascade_certificate(wt, 235, build_tree=build_metrical_tree, check_tree=check_tree)
+        c35 = cascade_certificate(wt, 35)
+        c235 = cascade_certificate(wt, 235)
 
         self.assertAlmostEqual(c35.carry_density_after, 0.605, places=2)
         self.assertAlmostEqual(c35.plain_density_after, 0.752, places=2)

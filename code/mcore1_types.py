@@ -25,7 +25,9 @@ class ScanBundle:
     final_carry: int
     tree_ok: bool
     tree_errors: list[str]
-    backend: str  # "upstream" | "local"
+    backend: str  # e.g. mcore_1@… | local
+    encoder: str  # "mcore_1" | "gjb2_sonification"
+    rc_tag: str | None = None
 
 
 @dataclass
@@ -40,6 +42,8 @@ class CascadeResult:
     plain_total_diff: int
     tree_wt_ok: bool
     tree_mut_ok: bool
+    deletion_check_ok: bool | None = None
+    deletion_check_errors: list[str] = field(default_factory=list)
 
 
 @dataclass

@@ -1,58 +1,60 @@
 # MCORE-1 algebra repository
 
-**Upstream (intended):** [github.com/vortexpixelz/mcore-1](https://github.com/vortexpixelz/mcore-1)
+**Upstream:** [github.com/vortexpixelz/mcore-1](https://github.com/vortexpixelz/mcore-1)  
+**Handoff:** [HANDOFF_FROM_MCORE1.md](HANDOFF_FROM_MCORE1.md) ← `HANDOFF_TO_GJB2.md` on upstream  
+**Reproducibility tag:** `mcore-1-v0.2-review-candidate`
 
-This GJB2 paper repo (`gjb2-mcore-sonification`) is the **empirical + sonification** layer. The separate **mcore-1** repo is the **metrical-tree checker** and formal cascade tests referenced in the manuscript (Theorem 1: `check_tree`, `test_cascade.py`).
+This GJB2 paper repo (`gjb2-mcore-sonification`) is the **empirical + sonification** layer. The **`mcore_1`** Python package (under `src/mcore_1/` upstream) provides the metrical-tree checker and formal cascade tests.
 
 ## Split of responsibilities
 
 | Repo | Role |
 |------|------|
-| **mcore-1** | Constituent trees, `CONSERVATION` / `OVERFLOW` checking, post-order `check_tree`, parametrised cascade certificate |
-| **gjb2-mcore-sonification** | DNA → trit encoder (`dna_to_mcore_trits`), Gabor audio, GJB2 analysis, figures, paper |
+| **mcore-1** | `mcore_1.encoder`, `mcore_1.check_tree` (`check_tree`, `check_deletion`, `check_constituent`), `tests/test_cascade.py` |
+| **gjb2-mcore-sonification** | Gabor audio, `analysis.py` figures, paper; **does not fork** `dna_to_trits` carry rules |
 
-## What exists here today
+| File here | Role |
+|-----------|------|
+| `code/checker.py` | Linear prefix **associativity** of the carry scan (semigroup), not the tree checker |
+| `code/gjb2_sonification.py` | Sonification source of record + paper statistics encoder |
+| `code/mcore1_upstream.py` | Loads `mcore_1` from `vendor/mcore-1` |
+| `code/mcore1_bridge.py` | GJB2 export; uses `mcore_1` when installed, else `mcore1_local` |
+| `code/mcore1_integration.py` | CLI + JSON export |
 
-- `code/checker.py` — **semigroup associativity** of the carry scan (prefix composition), not the tree checker.
-- `code/gjb2_sonification.py` — source-of-record encoder and WAV pipeline.
-- `code/analysis.py` — statistics and LaTeX fragments for the paper.
-- `code/mcore1_local.py` — local metrical-tree builder + `check_tree` (CONSERVATION / OVERFLOW / EMPTY_CONSTITUENT).
-- `code/mcore1_bridge.py` — GJB2 scan export, cascade certificates, optional `vendor/mcore-1` import.
-- `code/mcore1_integration.py` — CLI and JSON export to `exports/mcore1_gjb2.json`.
-- `tests/test_mcore1_integration.py` — parametric deletion sweep + paper reference positions (c.35 / c.235).
-
-## When mcore-1 is available
+## Install upstream
 
 ```bash
-# optional submodule layout
 git submodule add https://github.com/vortexpixelz/mcore-1.git vendor/mcore-1
-pip install -e vendor/mcore-1   # if packaged
-pytest vendor/mcore-1/tests/test_cascade.py
+cd vendor/mcore-1 && git checkout mcore-1-v0.2-review-candidate
+pip install -e .
 ```
 
-Then wire GJB2 CDS trits into the tree builder (or export trit weights from `dna_to_mcore_trits`) so Figure carry-cascade can be generated from checker output instead of post-hoc delta analysis alone.
-
-### Run integration now (local backend)
+## Run integration
 
 ```bash
 pip install -r code/requirements.txt
+python code/mcore1_integration.py --verify-encoder
+python code/mcore1_integration.py --deletion-check 35
 python code/mcore1_integration.py
-python code/mcore1_integration.py --parametric   # include k=1..30 sweep in JSON
-python code/mcore1_integration.py --cascade-only 35
 python -m unittest tests.test_mcore1_integration -v
+pytest vendor/mcore-1/tests/test_cascade.py
 ```
 
-With `vendor/mcore-1` checked out, the bridge auto-selects `mcore1.check_tree` from upstream; otherwise `mcore1_local` is used (printed as `Tree backend: local`).
+- **`--verify-encoder`** — `gjb2_sonification` vs `mcore_1.encoder.dna_to_trits` on live CDS  
+- **`--deletion-check K`** — `mcore_1.check_tree.check_deletion` frozen certificate (requires vendor)  
+- Table 1 **carry/plain ρ** — always from prefix-aligned `gjb2_sonification` re-encode (paper convention)
 
-## If the GitHub URL 404s
+## Encoder semantics (shared)
 
-The repository may be **private** or **not created yet**. Make it public (or add collaborators), push at least:
+Per-base update: \(u = v + \text{carry} + \epsilon_T\), \(t = u \bmod 3\), \(\text{carry} = \lfloor u/3 \rfloor\) with A=0, C=1, G=2, T=0 and \(\epsilon_T=1\) on T.
 
-- `mcore1/check_tree.py` — post-order validation, `EMPTY_CONSTITUENT` handling
-- `tests/test_cascade.py` — parametrized deletion positions $k \in \{1,\ldots,30\}$
-- `README.md` — install, run tests, link back to this paper repo
+## Checker caveats (from handoff)
+
+1. Pooling ceilings can flag **OVERFLOW** (S3+S3) without leaf trit changes.  
+2. Hull predicates mark subtrees containing the deletion site.  
+3. Theorem 3 shallowest-failure test: interior deletions \(k \in 2..n-1\) only.
 
 ## Paper cross-links
 
-- RC tag on this repo: `mcore-1-v0.2-review-candidate` (immutable read snapshot).
-- New integration work should land on `main` here and in `mcore-1` separately; do not rewrite the RC tag.
+- RC tag on **this** repo: `mcore-1-v0.2-review-candidate` (immutable read snapshot).  
+- Cite upstream tag **`mcore-1-v0.2-review-candidate`** for tree-checker reproducibility.
