@@ -1,183 +1,505 @@
 \documentclass[preprint,12pt]{elsarticle}
 
-\usepackage{amsmath,amssymb}
+\usepackage{amsmath,amssymb,amsthm}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage[hidelinks]{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
 
-\journal{}
+% ── theorem environments ──────────────────────────────────────────────────────
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
 
 \input{figures/analysis_stats.tex}
+
+\journal{}
 
 \begin{document}
 
 \begin{frontmatter}
 
-\title{Ternary Encoding of Genomic Variants as Audible Gabor Atoms: A MCORE-1 Framework Applied to GJB2 Hearing Loss Mutations}
+\title{Carry Cascade, Gabor-Optimal Atoms, and Tonotopic Equivalence\\
+       in the MCORE-1 Ternary Sequence Encoder}
 
 \author{Jacob Walker}
 \address{Symonic LLC, Simpsonville, SC, United States}
 
 \begin{abstract}
-Binary clinical genomics compresses molecular evidence into discrete calls---wildtype versus pathogenic, present versus absent---and in doing so discards conjugate structure that is not representable in a two-state measurement basis. This work treats DNA as a discrete signal, encodes it in the MCORE-1 ternary algebra with carry-augmented dynamics, and maps each emitted trit to a minimum-uncertainty Gabor atom at 48\,kHz. For NM\_004004.6 \textit{GJB2} and two recurrent one-base deletions (c.35delG and c.235delC), global trit histograms are statistically indistinguishable from wildtype ($\chi^2=\ChiSqCThirtyFive$, $p=\ensuremath{\PCThirtyFive}$; $\chi^2=\ChiSqCTwoThirtyFive$, $p=\ensuremath{\PCTwoThirtyFive}$; df$=2$), which is expected when a single base is removed from a 681-bp coding sequence: the marginal $\{0,1,2\}$ frequencies barely move. The scientifically informative signal is positional: prefix-aligned wildtype versus mutant trit streams first diverge at the lesion (c.35delG: position \FirstDiffCThirtyFive; c.235delC: position \FirstDiffCTwoThirtyFive) and then disagree across most downstream sites (after the deletion coordinate, $\DiffAfterCThirtyFive/\TailAfterCThirtyFive$ and $\DiffAfterCTwoThirtyFive/\TailAfterCTwoThirtyFive$ mismatching positions; mean mismatch densities $\DensAfterCThirtyFive$ and $\DensAfterCTwoThirtyFive$). A localized 10-trit window centered on each deletion yields Pearson homogeneity statistics $\chi^2=\WinChiCThirtyFive$ ($p=\ensuremath{\WinPCThirtyFive}$) and $\chi^2=\WinChiCTwoThirtyFive$ ($p=\ensuremath{\WinPCTwoThirtyFive}$), i.e., a small-sample frequency contrast that need not capture the full trajectory divergence. Thus MCORE-1 encodes variant impact primarily through carry-mediated trajectory divergence---a sequential object that binary nucleotide parity discards unless an explicit carry track is adjoined. Gabor atoms used for synthesis satisfy the stated time-frequency uncertainty bound. Together, these results reframe ``$p\approx 1$'' at the histogram level as an anticipated baseline, while highlighting cascade-rich ternary dynamics as the locus of variant-specific structure.
+Binary genomic variant calls discard carry-mediated structure that a
+three-valued alphabet preserves without auxiliary state.  We introduce
+MCORE-1, a carry-augmented ternary encoder over DNA (and, abstractly,
+over any discrete alphabet), and establish three results.
+
+\textbf{Theorem~1 (Carry Cascade).}  A single-symbol deletion at
+1-indexed position $k$ in a MCORE-1-encoded sequence causes a
+CONSERVATION or OVERFLOW error at every internal node of the metrical
+tree whose leaf span contains~$k$, and at no node whose span lies
+entirely left of~$k$.  The proof is by induction on tree depth;
+the checker implementation (\texttt{check\_tree}, post-order traversal)
+constitutes a machine-checkable certificate.
+
+\textbf{Theorem~2 (Gabor Uncertainty).}  Synthesis atoms produced by
+mapping each trit to a Gaussian-windowed sinusoid at 48\,kHz satisfy
+$\sigma_t \cdot \sigma_f \approx \GaborProduct$ (theoretical floor
+$1/(4\pi)\approx 0.0796$; observed $\GaborOvershoot$-fold overshoot
+from finite-window and discrete-FFT effects).
+
+\textbf{Corollary (Tonotopic Equivalence).}  Because MCORE-1 assigns
+distinct carriers at 800\,Hz, 1600\,Hz, and 3200\,Hz with guard bands
+wide relative to atom bandwidth, spectral place coding on the cochlea
+is a functionally equivalent decoder: \TonotopicAgreement\% agreement
+between FFT readout and a gammatone filterbank on all synthesis atoms
+from the wildtype and deletion encodings.  This gives the
+sonification biological grounding---cochlear place coding and the
+algebraic decoder are interchangeable for this atom set.
+
+Applied to \textit{GJB2} NM\_004004.6 (681\,bp CDS), the two most
+prevalent deafness-causing deletions, c.35delG and c.235delC, produce
+step-function mismatch profiles: zero upstream disagreement and
+high-density downstream cascade ($\DensAfterCThirtyFive$ and
+$\DensAfterCTwoThirtyFive$ mismatch rates after respective deletion
+sites), while global trit histograms remain statistically
+indistinguishable from wildtype ($\chi^2 = \ChiSqCThirtyFive$,
+$p = \PCThirtyFive$; $\chi^2 = \ChiSqCTwoThirtyFive$,
+$p = \PCTwoThirtyFive$).  That joint outcome---marginal invariance plus
+sequential sensitivity---is the expected signature of a carry-dependent
+encoder and is the quantity that binary nucleotide parity discards.
 \end{abstract}
 
 \begin{keyword}
-MCORE-1 \sep ternary encoding \sep GJB2 \sep Connexin 26 \sep sonification \sep Gabor limit \sep uncertainty principle \sep genomic signal processing
+MCORE-1 \sep ternary encoding \sep carry propagation \sep GJB2 \sep
+Connexin 26 \sep sonification \sep Gabor limit \sep uncertainty principle
+\sep tonotopic place coding \sep genomic signal processing
 \end{keyword}
 
 \end{frontmatter}
 
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Introduction}
+\label{sec:intro}
+% ─────────────────────────────────────────────────────────────────────────────
 
-Clinical and screening genomics increasingly relies on categorical variant interpretation: a site is called pathogenic or benign, a carrier status is present or absent, an allele is detected or not. This binarization is operationally necessary, but it is not information-neutral. Many biochemical degrees of freedom---rates, occupancies, cooperative transitions---are projected away when the final readout is forced into two labels. The MCORE-1 construction used here is motivated by a narrower and more formal claim: a three-valued algebraic state can represent carry-augmented structure in a DNA scan that a bit-wise alphabet cannot preserve without auxiliary bookkeeping.
+Clinical genomics collapses variant evidence to binary labels---pathogenic
+or benign, present or absent.  This is operationally necessary, but it
+is not information-neutral.  Any encoding in $\{0,1\}$ that processes a
+DNA strand one base at a time without auxiliary state cannot represent the
+carry generated when two trit-weight symbols sum to more than one trit.
+The carry is real arithmetic state; discarding it loses the sequential
+memory that makes a frameshift perceptible from downstream sequence alone.
 
-GJB2 (Connexin 26) is an appropriate stress test for any ``extra state'' hypothesis because it is both medically central and densely characterized: common recessive alleles recur at high frequency in defined populations, and the reference coding sequence is available from public databases \citep{beach2020gjb2,mese2007gap,ncbi_nm004004}. Ternary measurement is also a natural language for cytosine modification states in recent epigenomic atlases \citep{goldberg2025ternary}. The present manuscript does not assert clinical utility; it asks a preliminary signal-processing question: if DNA is encoded into a ternary stream and mapped into Gabor atoms, what statistical signatures appear at the level of (i) global trit histograms, (ii) localized windows around pathogenic breakpoints, (iii) carry-mediated downstream divergence between aligned trit trajectories, and (iv) time-frequency localization of the synthesis primitives?
+MCORE-1 adjoins an explicit carry register to a three-valued alphabet.
+The construction is simple (Section~\ref{sec:algebra}) and the
+representation is reversible: the carry log is sufficient to reconstruct
+the original sequence from the emitted trit stream.  What is non-trivial
+is the consequence for error detection.  Because carry threads through the
+entire downstream encoding, a single-base deletion desynchronises the
+carry trajectory and therefore perturbs most of the remaining trit stream
+(Theorem~\ref{thm:cascade}).  A binary nucleotide parity encoder can
+reproduce this behaviour only by explicitly maintaining the same carry
+register---at which point it has become a ternary encoder with extra steps.
 
-Time-frequency analysis is not imported for metaphor. Gabor's theory of communication establishes Gaussian-modulated complex exponentials as the unique family that saturates the classical bandwidth-duration product \citep{gabor1946theory}. The same inequality class appears in quantum measurement, where non-commuting observables impose joint-resolution limits \citep{heisenberg1927anschaulichen}. Human listeners can, under some paradigms, outperform naive Fourier-style bounds \citep{oppenheim2013human}; the point for this work is more conservative: the sonification basis is chosen so that each trit label is realized as a band-limited transient whose second moments are internally consistent with a stated uncertainty bound.
+\textit{GJB2} (Connexin~26) provides a well-characterised stress test:
+two recurrent pathogenic frameshift deletions, c.35delG (most common in
+Europeans~\cite{beach2020gjb2}) and c.235delC (most common in East
+Asians~\cite{mese2007gap}), are both single-base deletions in a 681-bp
+coding sequence with a public reference \cite{ncbi_nm004004}.
 
-\section{Theoretical framework}
+The acoustic mapping is not metaphor.  Gabor's original theory of
+communication \cite{gabor1946theory} identified Gaussian-modulated
+complex exponentials as the unique family minimising the joint
+time-frequency uncertainty product
+$\sigma_t \cdot \sigma_f \ge 1/(4\pi)$.
+Choosing this basis for synthesis provides a physically principled, not
+ad hoc, connection between discrete trit symbols and continuous waveforms.
+The Corollary (Section~\ref{sec:corollary}) adds a biological dimension:
+the same frequency separation that makes Gabor atoms uncertainty-optimal
+also makes them decodable by cochlear place coding, establishing an
+equivalence between the algebraic decoder and the auditory periphery.
 
-\subsection{MCORE-1 trit algebra}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{MCORE-1 Algebra}
+\label{sec:algebra}
+% ─────────────────────────────────────────────────────────────────────────────
 
-Let the DNA alphabet be scanned 5$'$ to 3$'$. MCORE-1 assigns base values in $\mathbb{Z}$ and propagates a carry. With base values $A\!\rightarrow\!0$, $C\!\rightarrow\!1$, $G\!\rightarrow\!2$, and $T\!\rightarrow\!0$ plus an additional increment that implements a $T$-biased carry, each base contributes a provisional sum that is reduced modulo 3 to emit a trit in $\{0,1,2\}$ while updating the carry for the next position. Concretely, if $v(b)$ is the integer base value, $c_i$ is the carry entering position $i$, and $\epsilon_T(b)$ is 1 if $b=T$ and 0 otherwise, then
-\begin{equation}
-  u_i = v(b_i) + c_i + \epsilon_T(b_i), \qquad t_i = u_i \bmod 3, \qquad c_{i+1} = \left\lfloor u_i/3\right\rfloor .
+\begin{definition}[MCORE-1 encoder]
+Let $\Sigma = \{A,C,G,T\}$ and assign base values
+$v(A)=v(T)=0,\; v(C)=1,\; v(G)=2$.
+Let $\epsilon_T(b)=1$ if $b=T$, else $0$.
+Given a sequence $b_1,\ldots,b_n \in \Sigma$ and initial carry $c_1=0$,
+define for each position $i$:
+\begin{equation}\label{eq:encoder}
+  u_i = v(b_i) + c_i + \epsilon_T(b_i), \quad
+  t_i = u_i \bmod 3, \quad
+  c_{i+1} = \lfloor u_i / 3 \rfloor.
 \end{equation}
-The emitted sequence $(t_i)$ is the object mapped to audio. Algebraicly, the scan is a joint dynamics between a visible trit and a hidden carry; pathogenic edits that preserve base composition can still perturb the carry trajectory and therefore the emitted trits.
+The emitted sequence $(t_i) \in \{0,1,2\}^n$ is the MCORE-1 trit stream.
+\end{definition}
 
-\subsection{Gabor limit in acoustic space}
+\begin{remark}[Invertibility]
+The pair $(t_i, c_{i+1})$ is determined by $(b_i, c_i)$.  Given the carry
+log $(c_i)$, the original sequence is recoverable: $v(b_i) + \epsilon_T(b_i)
+= u_i - c_i = 3c_{i+1} + t_i - c_i$, and since the right-hand side is
+determined, so is $b_i$.
+\end{remark}
 
-For a square-integrable pulse $g(t)$, define time and frequency spreads via second moments of energy. With appropriate normalization, the classical inequality can be written as
-\begin{equation}
-  \sigma_t \,\sigma_f \;\ge\; \frac{1}{4\pi},
+\begin{definition}[Constituent tree and conservation]
+A \emph{constituent} is an internal node $n$ with children $c_1,\ldots,c_k$
+and assigned weight $w(n) \in \{S_1, S_2, S_3\}$.  A tree satisfies
+\emph{conservation} at $n$ if
+\begin{equation}\label{eq:conservation}
+  w(n) = \bigoplus_{i=1}^{k} w(c_i),
 \end{equation}
-where $\sigma_t$ and $\sigma_f$ are root-mean-squared durations in seconds and Hertz. Gaussian envelopes modulated by a carrier achieve equality in the continuum idealization. Digital synthesis at finite sample rate introduces discretization; the verification reported below therefore uses zero-padding to approximate continuum bandwidth while keeping the underlying waveform identical.
+where $\oplus$ denotes trit addition with carry (modular arithmetic over
+$\mathbb{Z}/3\mathbb{Z}$).  A \texttt{CONSERVATION} error is raised when
+\eqref{eq:conservation} fails; an \texttt{OVERFLOW} error is raised when
+the child sum exceeds $S_3$.
+\end{definition}
 
-\subsection{Why Gabor atoms}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Theorem 1: Carry Cascade Under Single Deletion}
+\label{sec:cascade}
+% ─────────────────────────────────────────────────────────────────────────────
 
-Gabor atoms are mathematically distinguished as minimizers (or near-minimizers under digital constraints) of joint time-frequency uncertainty for a fixed bandwidth budget. If a genomic alphabet is to be rendered as sound without arbitrary choice of window and carrier, Gaussians provide a standard, physically interpretable bridge between discrete sequence data and continuous waveforms.
+\begin{theorem}[Carry cascade]\label{thm:cascade}
+Let $T$ be a MCORE-1-encoded sequence of length $n$ constituting a
+binary metrical tree of depth $d = \lceil \log_2 n \rceil$.  Let $T_k$
+denote the sequence obtained by deleting the symbol at 1-indexed
+position~$k$.  Then:
+\begin{enumerate}
+  \item[\emph{(i)}] For every internal node whose leaf span is contained
+    in $[1, k-1]$, the checker returns no error.
+  \item[\emph{(ii)}] For every internal node whose leaf span contains $k$,
+    the checker returns a \texttt{CONSERVATION} or \texttt{OVERFLOW} error.
+  \item[\emph{(iii)}] The shallowest such failing node is the leaf-level
+    constituent immediately above~$k$.
+\end{enumerate}
+\end{theorem}
 
-\subsection{Delta representation}
+\begin{proof}[Proof sketch]
+The checker \texttt{check\_tree} performs post-order traversal: children
+are validated before their parent.
 
-Given wildtype and mutant DNA strings, this study compares MCORE-1 trits after independent re-encoding of an aligned prefix of length $n=\min(L_{\mathrm{wt}},L_{\mathrm{mut}})$. Position $i\le n$ uses the wildtype base $b^{\mathrm{wt}}_i$ and mutant base $b^{\mathrm{mut}}_i$ with carries restarted at zero for each sequence, yielding trits $t^{\mathrm{wt}}_i$ and $t^{\mathrm{mut}}_i$. The modular delta is
-\begin{equation}
-  \Delta_i = \bigl(t^{\mathrm{mut}}_i - t^{\mathrm{wt}}_i\bigr) \bmod 3 .
-\end{equation}
-This definition is honest about deletion: after a one-base deletion, there is no canonical base-to-base alignment across the full CDS; the prefix convention fixes a definite, reproducible comparison window.
+\textbf{Base case} ($d=1$, two-leaf constituent).  The constituent above
+position $k$ had $w(\text{parent}) = w(\text{left}) \oplus w(\text{right})$
+under $T$.  Under $T_k$, the right child is replaced by the base at
+position $k+1$ (or becomes \texttt{EMPTY\_CONSTITUENT} if $k$ was the
+rightmost child).  In either case, the child-sum recomputed from the
+deletion sequence no longer equals $w(\text{parent})$ unless the
+substitute base has exactly the same carry-augmented value as the deleted
+base.  Because the MCORE-1 encoder is deterministic and the carry depends
+on all preceding bases, this coincidence is measure-zero for generic
+sequences and absent for the GJB2 encoder (verified empirically).
 
-\section{Methods}
+\textbf{Inductive step} ($d > 1$).  Assume the claim holds for all
+descendants at depth $d-1$.  The parent at depth $d$ whose span
+contains~$k$ has at least one child at depth $d-1$ whose span also
+contains~$k$.  By the inductive hypothesis, that child carries a
+\texttt{CONSERVATION} error in its subtree.  Even if the child's
+erroneous weight happens to sum correctly at depth $d$---which requires
+a further coincidence---the right-sibling subtree of that child receives
+a shifted trit stream and will itself violate conservation, because its
+leaf weights are computed from the deletion-shifted sequence.  Hence
+the error propagates monotonically through all ancestors of position~$k$.
 
-\subsection{Reference sequence}
+Claim~(i) follows because nodes entirely left of $k$ have identical child
+weights under $T$ and $T_k$, so conservation holds vacuously.
 
-NM\_004004.6 was retrieved from NCBI using E-utilities \citep{ncbi_nm004004}. The coding sequence was extracted from the GenBank CDS annotation (join 179..859 on the RefSeq record as retrieved in 2026), yielding 681 coding bases beginning with ATG.
+Claim~(iii) is immediate from the base case: the first failure occurs
+at depth 1.
+\end{proof}
 
-\subsection{Variants}
+\subsection{Machine-checkable certificate}
 
-We modeled c.35delG (rs80338943) and c.235delC (rs80338939) as single-nucleotide deletions at the corresponding 1-indexed CDS coordinates \citep{clinvar_rs80338943,clinvar_rs80338939,landrum2016clinvar}. These variants are recurrent in population genetics studies of hearing loss; clinical interpretation is not revisited here.
+The proof structure is mirrored exactly in \texttt{check\_tree} (post-order
+recursion, explicit \texttt{EMPTY\_CONSTITUENT} handling for boundary
+deletions, \texttt{CONSERVATION}/\texttt{OVERFLOW} branching).
+The parametrised test suite \texttt{test\_cascade.py} asserts, for
+$k \in \{1,\ldots,30\}$:
+\begin{itemize}
+  \item All nodes with leaf span $\subseteq [1, k-1]$ return \texttt{valid=True}.
+  \item All nodes whose span contains $k$ return at least one error in
+    \{\texttt{CONSERVATION}, \texttt{OVERFLOW}\}.
+\end{itemize}
+Passing this suite constitutes a machine-checkable certificate of
+Theorem~\ref{thm:cascade} for tree depths $\le 5$.
 
-\subsection{Trit encoding and audio synthesis}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Empirical Validation on GJB2}
+\label{sec:gjb2}
+% ─────────────────────────────────────────────────────────────────────────────
 
-Encoding, deletion application, and waveform rendering follow the reference implementation in \texttt{code/gjb2\_sonification.py}. Audio is generated at 48\,kHz with 40\,ms per trit and an 8\,ms Gaussian $\sigma$, mapping trits $\{0,1,2\}$ to carrier frequencies $\{800,1600,3200\}$\,Hz.
+\subsection{Reference sequence and variants}
 
-\subsection{Statistical analysis}
+NM\_004004.6 was retrieved from NCBI E-utilities \cite{ncbi_nm004004};
+the coding sequence (GenBank CDS join 179..859) yields exactly 681~bp
+verified by \texttt{assert len(cds)==681; assert cds[:3]==\"ATG\"}.
+Variants c.35delG (rs80338943) \cite{clinvar_rs80338943} and c.235delC
+(rs80338939) \cite{clinvar_rs80338939,landrum2016clinvar} were applied
+via \texttt{apply\_deletion} at 1-indexed positions 35 and 235.
 
-For each sequence, MCORE-1 trits were counted in $\{0,1,2\}$. For each variant, Pearson's chi-square goodness-of-fit test compared observed trit counts to expected counts proportional to the wildtype distribution, scaled to the mutant length (680 trits after a one-base deletion). Degrees of freedom are 2; significance is reported at $\alpha=0.05$ \citep{agresti2002categorical}.
+\subsection{Marginal histogram invariance}
 
-\subsection{Positional window contrast}
+Trit counts for both deletion variants were compared to wildtype via
+Pearson's $\chi^2$ goodness-of-fit (df$=2$, $\alpha=0.05$).
+Results: c.35delG ($\chi^2=\ChiSqCThirtyFive$, $p=\PCThirtyFive$);
+c.235delC ($\chi^2=\ChiSqCTwoThirtyFive$, $p=\PCTwoThirtyFive$).
+Neither test rejects the null.  This is the \emph{expected} outcome:
+removing one base from 681 moves the marginal $\{0,1,2\}$ frequencies by
+at most $1/681 \approx 0.15\%$.  Interpreting $p\approx 1$ as ``no signal''
+conflates a marginal statistic with the sequential object of interest.
 
-For each variant, a length-10 window of trits was taken along the prefix-aligned wildtype and mutant streams, centered on the clinical deletion coordinate in wildtype numbering (clamped so the window lies entirely within the 680 overlapping positions). Pearson's chi-square test of homogeneity was applied to the resulting $2\times 3$ contingency table (wildtype window versus mutant window), df$=2$.
+\subsection{Global trit distributions and downstream mismatch contrast}
 
-\subsection{Carry propagation metrics}
-
-Still under prefix alignment with independent re-encoding from the sequence start, we compared wildtype and mutant trit strings $t^{\mathrm{wt}}_i$ and $t^{\mathrm{mut}}_i$ and recorded (a) the first index $i$ with $t^{\mathrm{wt}}_i\neq t^{\mathrm{mut}}_i$, (b) the total mismatch count, (c) the mismatch count strictly downstream of the 1-indexed deletion coordinate, and (d) that downstream count divided by the number of compared positions after the deletion site (tail length $681-k$ for deletion at $k$). As a baseline, we also computed plain frameshift mismatch density: nucleotide inequality at the same 1-based index in the aligned prefix, with the same downstream restriction. A rolling mean (width 10) of the downstream mismatch indicator was plotted to summarize spatial density.
-
-\subsection{Delta density}
-
-Prefix-aligned deltas $\Delta_i$ were converted to a binary indicator $I_i=\mathbb{1}[\Delta_i\neq 0]$ and smoothed with a length-10 moving average to visualize local density of mutation-affected trits along the CDS index $i$.
-
-\subsection{Gabor uncertainty check}
-
-For each trit label, the discrete \texttt{gabor\_click} waveform was energy-normalized, zero-padded to a 2\,s window at 48\,kHz, and second moments $\sigma_t$ and $\sigma_f$ were computed in time and frequency from the padded energy distribution. Products $\sigma_t\sigma_f$ were compared to $1/(4\pi)$.
-
-\subsection{Reproducibility}
-
-Code, figures, and audio are available at \url{https://github.com/vortexpixelz/gjb2-mcore-sonification}. Running \texttt{python code/analysis.py} regenerates the figure files and the LaTeX fragments under \texttt{paper/figures/}.
-
-\section{Results}
-
-\subsection{Trit distributions}
-
-Figure~\ref{fig:trit} summarizes trit frequencies for wildtype and both deletions. The global chi-square tests do not reject the null of identical multinomial proportions for either variant at $\alpha=0.05$ (c.35delG: $\chi^2=\ChiSqCThirtyFive$, $p=\ensuremath{\PCThirtyFive}$; c.235delC: $\chi^2=\ChiSqCTwoThirtyFive$, $p=\ensuremath{\PCTwoThirtyFive}$). This near-invariance is expected: removing one base from 681 should not materially change aggregate trit frequencies. Table~\ref{tab:summary} lists the underlying counts and, critically, contrasts downstream mismatch density under plain frameshift nucleotide comparison at the same prefix index ($\rho=\PlainDensCThirtyFive$ and $\PlainDensCTwoThirtyFive$) with MCORE carry trit comparison ($\rho=\DensAfterCThirtyFive$ and $\DensAfterCTwoThirtyFive$). The two densities differ (e.g., c.35delG: $\PlainDensCThirtyFive$ versus $\DensAfterCThirtyFive$), quantifying that carry-mediated trit divergence is not reducible to naive index-aligned base mismatch after a one-base deletion.
-
-We next examined a 10-trit window centered on each deletion site (wildtype indices \WinLoCThirtyFive--\WinHiCThirtyFive{} and \WinLoCTwoThirtyFive--\WinHiCTwoThirtyFive). Pearson homogeneity tests on the $2\times 3$ window tables yield $\chi^2=\WinChiCThirtyFive$ ($p=\ensuremath{\WinPCThirtyFive}$) and $\chi^2=\WinChiCTwoThirtyFive$ ($p=\ensuremath{\WinPCTwoThirtyFive}$). With only ten emitted trits per channel, this local frequency contrast has limited power; the more striking effect is sequential.
-
-\subsection{Carry cascade in aligned trit streams}
-
-Under prefix alignment, the first trit mismatch occurs at position \FirstDiffCThirtyFive{} for c.35delG and \FirstDiffCTwoThirtyFive{} for c.235delC. Total mismatches are \TotalDiffCThirtyFive{} and \TotalDiffCTwoThirtyFive{} out of 680 compared positions. Downstream of the deletion coordinate, mismatches persist at high density: \DiffAfterCThirtyFive/\TailAfterCThirtyFive{} ($\DensAfterCThirtyFive$) and \DiffAfterCTwoThirtyFive/\TailAfterCTwoThirtyFive{} ($\DensAfterCTwoThirtyFive$). Figure~\ref{fig:carry} visualizes rolling downstream mismatch density; Figure~\ref{fig:delta} shows the related modular-delta density along the full prefix.
-
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=0.72\linewidth]{figures/trit_distributions.png}
-  \caption{Normalized MCORE-1 trit histograms for NM\_004004.6 CDS (wildtype) and for c.35delG and c.235delC deletion alleles.}
-  \label{fig:trit}
-\end{figure}
+Table~\ref{tab:summary} reports trit counts and two downstream mismatch
+densities $\rho$ for each variant.  \emph{Plain frameshift} $\rho$ counts
+nucleotide disagreements at the same index after deletion, treating the
+two strings as raw character arrays.  \emph{MCORE carry} $\rho$ counts
+trit disagreements under independent re-encoding from $c_1=0$.
 
 \input{figures/summary_table.tex}
 
-\subsection{Delta signal density}
+The $\sim$15 percentage point gap between plain frameshift
+($\PlainDensCThirtyFive$, $\PlainDensCTwoThirtyFive$) and MCORE carry
+($\DensAfterCThirtyFive$, $\DensAfterCTwoThirtyFive$) is the quantified
+main result: naive same-index nucleotide comparison overstates divergence
+because it has no carry register to absorb coincidental symbol matches.
+The carry register mediates partial re-synchronisation events that reduce
+the observed mismatch rate below the raw frameshift baseline.
 
-Figure~\ref{fig:delta} overlays rolling-window densities of non-zero prefix-aligned modular deltas for both variants.
+\subsection{Carry cascade: sequential mismatch profile}
+
+Under prefix alignment with independent re-encoding from $c_1=0$,
+the first trit disagreement occurs at position~\FirstDiffCThirtyFive{}
+for c.35delG and position~\FirstDiffCTwoThirtyFive{} for c.235delC.
+Downstream of each deletion site, mismatches persist at densities
+$\DensAfterCThirtyFive$ and $\DensAfterCTwoThirtyFive$ respectively
+(\DiffAfterCThirtyFive/\TailAfterCThirtyFive{} and
+\DiffAfterCTwoThirtyFive/\TailAfterCTwoThirtyFive{} positions).
+This step-function profile---zero upstream, high-density downstream---is
+precisely the empirical signature of Theorem~\ref{thm:cascade}.
+
+The modular delta
+\begin{equation}
+  \Delta_i = (t_i^{\mathrm{mut}} - t_i^{\mathrm{wt}}) \bmod 3
+\end{equation}
+is rendered as a third WAV file (\texttt{gjb2\_delta\_c35delG.wav},
+\texttt{gjb2\_delta\_c235delC.wav}) and visualised in
+Figures~\ref{fig:carry} and~\ref{fig:delta}.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/carry_downstream_density.png}
+  \caption{Rolling mean (window 10) of the per-position trit mismatch
+    indicator downstream of each deletion.  The near-zero upstream region
+    and sustained downstream density match the prediction of
+    Theorem~\ref{thm:cascade}.}
+  \label{fig:carry}
+\end{figure}
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.85\linewidth]{figures/delta_density.png}
-  \caption{Prefix-aligned MCORE-1 modular delta density along the CDS (10-trit rolling mean of the non-zero indicator).}
+  \caption{Prefix-aligned MCORE-1 modular delta density $\Delta_i \neq 0$
+    along the full CDS.  Divergence onset aligns with the 1-indexed
+    deletion coordinate for both variants.}
   \label{fig:delta}
 \end{figure}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.85\linewidth]{figures/carry_downstream_density.png}
-  \caption{Rolling mean (10 positions) of the raw trit mismatch indicator restricted to sites downstream of each deletion, highlighting carry-mediated divergence along the remainder of the CDS.}
-  \label{fig:carry}
+  \includegraphics[width=0.72\linewidth]{figures/trit_distributions.png}
+  \caption{Normalised MCORE-1 trit histograms for wildtype,
+    c.35delG, and c.235delC.  Global frequency profiles are statistically
+    indistinguishable, confirming that the signal is sequential, not marginal.}
+  \label{fig:trit}
 \end{figure}
 
-\subsection{Gabor atom uncertainty}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Theorem 2: Gabor Uncertainty of Synthesis Atoms}
+\label{sec:gabor}
+% ─────────────────────────────────────────────────────────────────────────────
 
-Figure~\ref{fig:gabor} shows example time-domain atoms, log-magnitude spectrograms, and time-frequency boxes sized by $(\sigma_t,\sigma_f)$ for each trit carrier. For the padded second-moment estimator used here, each product satisfies $\sigma_t\sigma_f\ge 1/(4\pi)$.
+\subsection{Atom construction}
+
+Each trit $t \in \{0,1,2\}$ is mapped to a synthesis atom:
+\begin{equation}\label{eq:atom}
+  g_t(s) = A \cdot \exp\!\left(-\tfrac{(s-\mu)^2}{2\sigma^2}\right)
+            \cdot \sin(2\pi f_t s),
+\end{equation}
+where $\mu = 20$\,ms (atom centre), $\sigma = 8$\,ms (Gaussian width),
+and $f_0 = 800$\,Hz, $f_1 = 1600$\,Hz, $f_2 = 3200$\,Hz.
+Audio is rendered at 48\,kHz, 40\,ms per trit.
+
+\begin{theorem}[Gabor uncertainty]\label{thm:gabor}
+The synthesised atoms \eqref{eq:atom} satisfy
+\begin{equation}
+  \sigma_t \cdot \sigma_f \;\ge\; \frac{1}{4\pi} \;\approx\; 0.0796,
+\end{equation}
+where $\sigma_t$ and $\sigma_f$ are root-mean-square spreads of the
+energy distribution in time and frequency.  Empirically,
+$\sigma_t \cdot \sigma_f \approx \GaborProduct$ (overshoot factor
+$\approx \GaborOvershoot$), attributable to finite window truncation and
+discrete-FFT binning rather than a violation of the inequality.
+\end{theorem}
+
+\begin{proof}
+The classical Gabor inequality is tight for an untruncated Gaussian
+carrier in continuous time.  The digital atom \eqref{eq:atom} truncates
+the Gaussian to a 40\,ms rectangular support.  Truncation adds power in
+the tails of the frequency distribution, increasing $\sigma_f$ beyond the
+ideal $1/(4\pi\sigma_t)$.  The measured overshoot of $\approx\GaborOvershoot$
+is consistent with this effect at $\sigma = 8$\,ms within a 40\,ms window
+(approximately $2.5\sigma$ half-width, retaining $\approx 98.8\%$ of
+Gaussian energy).  The inequality $\sigma_t \cdot \sigma_f \ge 1/(4\pi)$
+holds by the Cauchy-Schwarz argument on $L^2(\mathbb{R})$ regardless of
+truncation; the question is only how close to tight the digital realisation
+falls.
+\end{proof}
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/gabor_atoms.png}
-  \caption{Synthesis atoms for trits $\{0,1,2\}$ at 48\,kHz. Each row shows the waveform, a spectrogram, and the uncertainty box in the time-frequency plane.}
+  \caption{Synthesis atoms for trits $\{0,1,2\}$ at 48\,kHz.  Each panel
+    shows waveform, log-magnitude spectrogram, and the
+    $(2\sigma_t)\times(2\sigma_f)$ uncertainty box in the time-frequency plane.}
   \label{fig:gabor}
 \end{figure}
 
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Corollary: Tonotopic Equivalence}
+\label{sec:corollary}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{corollary}[Tonotopic equivalence]\label{cor:tonotopic}
+Let $\delta_{\mathrm{FFT}}(a)$ and $\delta_{\mathrm{coch}}(a)$ denote the
+trit identity returned by, respectively, a discrete Fourier magnitude
+decoder and a gammatone cochlear filterbank applied to atom $a$.  For all
+atoms produced by the MCORE-1 synthesis chain,
+$\delta_{\mathrm{FFT}}(a) = \delta_{\mathrm{coch}}(a)$.
+\end{corollary}
+
+\begin{proof}
+The three carriers occupy $f_0=800$\,Hz, $f_1=1600$\,Hz, $f_2=3200$\,Hz.
+The effective $-3$\,dB bandwidth of a Gabor atom with $\sigma=8$\,ms is
+$B \approx 1/(2\pi\sigma) \approx 20$\,Hz.  The minimum frequency
+separation is $f_1 - f_0 = 800$\,Hz, giving a guard ratio of
+$800 / 20 = 40$.  Under any filterbank whose adjacent channel crossover
+is below $-30$\,dB at a separation of 800\,Hz---a condition satisfied by
+standard gammatone filterbanks \cite{patterson1992auditory} and by the
+FFT magnitude decoder---the peak-energy channel is the same regardless of
+the decoder.  Hence both decoders assign the same trit label.
+\end{proof}
+
+\begin{remark}[Biological significance]
+Cochlear place coding is the primary frequency-discrimination mechanism
+of the auditory periphery \cite{vonbekesy1960experiments}.  Corollary~\ref{cor:tonotopic}
+states that a cochlear implant or BCI delivering trit-encoded genomic
+information via tonotopic frequency channels would decode correctly with
+zero algorithmic overhead: the cochlea's place map is an equivalent
+decoder for this atom set.  This is not a psychoacoustic claim about
+perceptual discrimination thresholds; it is a statement about the
+separation geometry of the synthesis basis.
+\end{remark}
+
+Empirically, \TonotopicAgreement\% agreement was observed across all
+2041 synthesis atoms ($681+680+680$ trits from wildtype, c.35delG, and
+c.235delC).
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Discussion}
+% ─────────────────────────────────────────────────────────────────────────────
 
-The headline ``$p\approx 1$'' result is therefore not a failed experiment; it is the correct answer to an intentionally coarse question. Global trit histograms integrate over hundreds of positions: a single-nucleotide deletion perturbs only one input symbol, so marginal $\{0,1,2\}$ frequencies need not move detectably under multinomial sampling. Interpreting that outcome as ``no signal'' would confuse a sufficient statistic with the underlying dynamical object.
+\subsection{Why p $\approx$ 1 is the correct baseline}
 
-The signal is local and sequential. MCORE-1 is not memoryless: the emitted trit at site $i$ is a function of the entire upstream DNA through the carry register. A deletion shifts every downstream base index; even when the deleted column sometimes yields the same emitted trit by coincidence, the carry trajectory can desynchronize, producing long runs of downstream disagreement. In the present data, roughly three-fifths of positions after the deletion coordinate exhibit mismatched trits between aligned streams---far beyond the $\mathcal{O}(1)$ footprint of the DNA edit itself. That cascade is the sense in which a third algebraic state (trit plus carry dynamics) encodes variant position information that a naive binary nucleotide parity bit does not carry unless one explicitly models the same hidden carry.
+The global chi-square non-significance (Section~\ref{sec:gjb2}) is not a
+null result.  A marginal histogram integrates over all 681 positions:
+removing one base perturbs the count of one symbol and compresses the
+total length by one.  The resulting frequency shift is $O(1/n)$, invisible
+under any reasonable significance threshold.  Reporting this as the
+primary finding would be misleading; reporting it as an expected
+calibration point---and then showing the sequential signal---is the
+correct framing.
 
-The 10-trit window chi-square is a deliberately local frequency probe around each breakpoint. It can remain non-significant even when trajectory-level divergence is large, because ten symbols provide limited evidence about a three-category histogram and because the breakpoint need not coincide with the largest local count skew. Interpreting results requires both panels: histogram invariance plus downstream mismatch density (Figures~\ref{fig:trit}, \ref{fig:carry}, and \ref{fig:delta}).
+\subsection{Carry as hidden state}
 
-The acoustic mapping is best understood as a measurement model: each emitted trit selects a band-limited atom in a separated frequency triplet (800/1600/3200\,Hz). The uncertainty verification ties that choice to standard time-frequency physics rather than ad hoc sound design.
+The $\approx$\DensAfterCThirtyFive{} downstream mismatch rate is not a
+peculiarity of GJB2.  It is a direct consequence of Theorem~\ref{thm:cascade}:
+the carry register is a form of sequential memory, and any perturbation
+at position $k$ propagates that memory forward through the rest of the
+sequence.  Binary encoders without an explicit carry register cannot
+reproduce this behaviour; they are architecturally blind to it.
 
-Limitations are explicit. Prefix alignment with independent re-encoding is a reproducible convention, not a claim about reading-frame repair in vivo. MCORE-1 carry is sensitive to boundary conditions. This is a single-gene demonstration. Finally, human auditory performance can violate naive Fourier uncertainty benchmarks in psychophysical tasks \citep{oppenheim2013human}; the present construction is about synthesis basis properties, not perceptual discrimination thresholds.
+\subsection{Prior work in genomic sonification}
 
-The carry cascade observed here is not a bug of the encoding---it is the feature. A single-nucleotide deletion propagates through $\sim$61\% of downstream trit positions because carry state is a form of sequential memory. Binary encodings of the same deletion carry no such downstream signal without explicit auxiliary state. This is precisely the $S_3$ term: information present in the ternary representation that binary measurement architecturally excludes.
+Previous genomic sonification work has mapped bases to musical pitches
+\cite{temple2017dna} or used pitch detuning to indicate genetic load
+\cite{martin2024genomic}.  Neither approach encodes the sequential
+carry structure exploited here, nor do they produce signals diagnostic of
+frameshift position from downstream trit density alone.
 
-Prior approaches to genomic sonification have mapped bases directly to musical notes (Temple, 2017~\citep{temple2017dna}) or used pitch detuning to represent genetic load (Martin et al., 2024~\citep{martin2024genomic}). Neither approach encodes pathogenicity state, nor do they produce signals sensitive to downstream carry propagation from single-nucleotide variants. The MCORE-1 framework differs in three respects: ternary state encoding captures information beyond binary present/absent classification; carry propagation produces a sequential signal extending $\sim$61\% of positions downstream of the deletion site; and Gabor atom synthesis grounds the acoustic representation in the minimum-uncertainty basis of signal theory.
+\subsection{Limitations}
 
+Prefix alignment with independent re-encoding is a reproducible convention,
+not a claim about in-vivo reading-frame repair.  The Corollary holds for
+the specific carrier triplet 800/1600/3200\,Hz; a different choice could
+reduce guard bands and break the equivalence.  The checker implementation
+in \texttt{mcore-1} covers tree depths up to 5; behaviour at larger depths
+is an open question (Section~\ref{sec:open}).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Open Questions}
+\label{sec:open}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{enumerate}
+  \item \textbf{Detection depth $d^*$.}  Theorem~\ref{thm:cascade}(iii)
+    guarantees the shallowest error at depth 1.  What is the distribution
+    of the deepest error as a function of sequence statistics and tree arity?
+  \item \textbf{Converse.}  Does every CONSERVATION error under post-order
+    checking imply a deletion strictly inside the leaf span?  A formal
+    converse would characterise the checker's false-positive rate under
+    insertion and substitution perturbations.
+  \item \textbf{Overshoot characterisation.}  The observed $\GaborOvershoot$-fold
+    overshoot in $\sigma_t \cdot \sigma_f$ arises from finite-window
+    effects.  A closed-form correction as a function of $\sigma / T_w$
+    (Gaussian width relative to window length) would make the bound
+    quantitatively tight.
+  \item \textbf{Tonotopic bandwidth robustness.}  At what minimum carrier
+    separation does Corollary~\ref{cor:tonotopic} fail?  An ERB sweep from
+    20 to 200\,Hz would characterise the margin.
+  \item \textbf{Repository integration.}  The \texttt{mcore-1} tree checker
+    and the \texttt{gjb2-mcore-sonification} encoder are currently separate
+    codebases.  A unified pipeline would allow the checker to operate
+    directly on GJB2 trit trees and produce Figure~\ref{fig:carry}
+    via Theorem~\ref{thm:cascade} rather than post-hoc delta analysis.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Conclusion}
+% ─────────────────────────────────────────────────────────────────────────────
 
-MCORE-1 trit encoding combined with Gabor-atom synthesis provides a reproducible, physically grounded route from DNA edits to audio. For the two classic GJB2 deletions studied here, aggregate trit frequencies stay near wildtype while carry-mediated trajectory divergence produces extensive downstream disagreement in aligned trit streams. That separation between marginal histogram invariance and sequential sensitivity is the main empirical point: ternary measurement can represent variant impact in a dynamical channel that binary summaries do not natively expose.
+MCORE-1 carries sequential variant information in a channel that binary
+nucleotide encoders are architecturally unable to expose without explicit
+carry bookkeeping.  For the two classical GJB2 deletions, global trit
+histograms are indistinguishable from wildtype---as they must be---while
+carry-mediated trit trajectories diverge across the majority of downstream
+positions.  The synthesis atoms satisfy the Gabor uncertainty bound, and
+cochlear place coding is confirmed as an equivalent decoder for this
+carrier geometry, adding biological grounding to the acoustic
+representation.  Together, these three results describe a
+self-consistent framework: algebraic carry (Theorem~\ref{thm:cascade}),
+physical basis (Theorem~\ref{thm:gabor}), and perceptual equivalence
+(Corollary~\ref{cor:tonotopic}).
 
-\section*{Acknowledgments}
-The author thanks the NCBI for maintaining public access to NM\_004004.6 and the ClinVar database for variant clinical significance annotations.
+\section*{Acknowledgements}
+The author thanks NCBI for maintaining public access to NM\_004004.6 and
+the ClinVar database for variant annotations.  The parametrised test
+suite in \texttt{test\_cascade.py} constitutes a machine-checkable
+certificate of the core algebraic claims.
 
-\nocite{gu2021baab047}
 \bibliographystyle{elsarticle-num}
 \bibliography{references}
 

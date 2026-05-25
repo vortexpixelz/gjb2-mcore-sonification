@@ -183,6 +183,48 @@ def _time_freq_sigmas(signal: np.ndarray, sr: float) -> tuple[float, float, floa
     return sig_t, sig_f, sig_t * sig_f
 
 
+def _gabor_summary(gabor_rows: dict[int, dict[str, float]]) -> tuple[float, float]:
+    """Mean uncertainty product and ratio to continuum floor 1/(4π)."""
+    gabor_limit = 1.0 / (4.0 * np.pi)
+    products = [float(gabor_rows[t]["product"]) for t in (0, 1, 2)]
+    mean_product = float(np.mean(products))
+    overshoot = mean_product / gabor_limit
+    return mean_product, overshoot
+
+
+def _decode_fft_trit(signal: np.ndarray, sr: float) -> int:
+    spec = np.abs(rfft(signal))
+    freqs = rfftfreq(signal.size, d=1.0 / sr)
+    carriers = np.array([float(TRIT_FREQ[t]) for t in (0, 1, 2)])
+    mask = (freqs >= 500.0) & (freqs <= 4000.0)
+    peak_f = float(freqs[mask][int(np.argmax(spec[mask]))])
+    return int(np.argmin(np.abs(carriers - peak_f)))
+
+
+def _decode_cochlear_trit(signal: np.ndarray, sr: float) -> int:
+    """Gammatone-proxy: peak band energy at 800 / 1600 / 3200 Hz guard bands."""
+    spec = np.abs(rfft(signal)) ** 2
+    freqs = rfftfreq(signal.size, d=1.0 / sr)
+    bands = ((600.0, 1000.0), (1400.0, 1800.0), (2800.0, 3600.0))
+    energies = [float(spec[(freqs >= lo) & (freqs <= hi)].sum()) for lo, hi in bands]
+    return int(np.argmax(energies))
+
+
+def _tonotopic_agreement(sequences: list[str]) -> tuple[float, int]:
+    agree = 0
+    total = 0
+    for seq in sequences:
+        for trit in dna_to_mcore_trits(seq):
+            sig = gabor_click(int(trit)).astype(float)
+            sig /= np.sqrt(np.sum(sig * sig)) + 1e-30
+            fft_t = _decode_fft_trit(sig, float(SAMPLE_RATE))
+            coch_t = _decode_cochlear_trit(sig, float(SAMPLE_RATE))
+            agree += int(fft_t == coch_t)
+            total += 1
+    pct = 100.0 * agree / total if total else 0.0
+    return pct, total
+
+
 def _plot_gabor_figure(out_path: Path) -> dict[int, dict[str, float]]:
     _setup_matplotlib()
     gabor_limit = 1.0 / (4.0 * np.pi)
@@ -411,20 +453,21 @@ def main() -> None:
         f.write("\\centering\n")
         f.write("\\label{tab:summary}\n")
         f.write(
-            "\\caption{Trit distribution statistics for GJB2 wildtype and pathogenic variants. "
-            "Downstream mismatch densities $\\rho$ count disagreements strictly after the deletion "
-            "coordinate under prefix alignment: plain frameshift compares nucleotides at the same "
-            "index; MCORE carry compares independently re-encoded trits.}\n"
+            "\\caption{Trit distribution statistics and downstream mismatch densities "
+            "$\\rho$ for GJB2 wildtype and pathogenic variants. Plain frameshift compares "
+            "nucleotides at the same prefix index; MCORE carry compares independently "
+            "re-encoded trits. The $\\sim$15\\,pp gap quantifies carry-mediated encoding "
+            "beyond a na\\\"ive frame shift.}\n"
         )
         f.write("\\begin{tabular}{lrrrrrrrr}\n")
-        f.write("\\hline\n")
+        f.write("\\toprule\n")
         f.write(
-            "Sequence & Length (bp) & Trit 0 & Trit 1 & Trit 2 & $\\chi^2$ vs WT & $p$-value & "
-            "Plain frameshift $\\rho$ & MCORE carry $\\rho$ \\\\\n"
+            "Sequence & Length & Trit 0 & Trit 1 & Trit 2 & $\\chi^2$ vs WT & $p$-value & "
+            "Plain $\\rho$ & MCORE $\\rho$ \\\\\n"
         )
-        f.write("\\hline\n")
+        f.write("\\midrule\n")
         f.write(
-            row_tex("Wildtype (NM\\_004004.6 CDS)", len(wt), c_wt, "---", "---", "---", "---")
+            row_tex("Wildtype (NM\\_004004.6)", len(wt), c_wt, "---", "---", "---", "---")
         )
         f.write(
             row_tex(
@@ -448,9 +491,16 @@ def main() -> None:
                 f"{r235['carry_density_after_site']:.3f}",
             )
         )
-        f.write("\\hline\n")
+        f.write("\\bottomrule\n")
         f.write("\\end{tabular}\n")
         f.write("\\end{table}\n")
+
+    gabor_product, gabor_overshoot = _gabor_summary(gabor_rows)
+    tonotopic_pct, tonotopic_n = _tonotopic_agreement([wt, c35, c235])
+    print(
+        f"\nGabor mean product={gabor_product:.6f}, overshoot={gabor_overshoot:.3f}x; "
+        f"tonotopic agreement={tonotopic_pct:.1f}% ({tonotopic_n} atoms)"
+    )
 
     # Persist numeric results for LaTeX \\input (optional)
     stats_tex = FIG_DIR / "analysis_stats.tex"
@@ -482,6 +532,9 @@ def main() -> None:
         f.write(f"\\newcommand{{\\DiffAfterCTwoThirtyFive}}{{{int(r235['carry_n_diff_after_site'])}}}\n")
         f.write(f"\\newcommand{{\\TailAfterCTwoThirtyFive}}{{{int(r235['carry_tail_len_after_site'])}}}\n")
         f.write(f"\\newcommand{{\\DensAfterCTwoThirtyFive}}{{{r235['carry_density_after_site']:.3f}}}\n")
+        f.write(f"\\newcommand{{\\GaborProduct}}{{{gabor_product:.3f}}}\n")
+        f.write(f"\\newcommand{{\\GaborOvershoot}}{{{gabor_overshoot:.2f}}}\n")
+        f.write(f"\\newcommand{{\\TonotopicAgreement}}{{{tonotopic_pct:.1f}}}\n")
 
     # Console summary for Gabor verification
     print("\nGabor atom uncertainty (normalized click trains)")
