@@ -2,6 +2,8 @@
 
 This repository accompanies a working manuscript on MCORE-1 ternary encoding of the GJB2 (Connexin 26) coding sequence and Gabor-atom sonification of wildtype and common pathogenic deletion alleles. It includes reproducible Python analysis, generated figures for the LaTeX paper, and rendered WAV audio aligned with the synthesis parameters in `code/gjb2_sonification.py`.
 
+**Related repository:** [vortexpixelz/mcore-1](https://github.com/vortexpixelz/mcore-1) — metrical-tree checker and carry-cascade certificate (`check_tree`, `test_cascade.py`). This repo holds the GJB2 case study and encoder; see [docs/MCORE1.md](docs/MCORE1.md) for the split and submodule plan.
+
 ## Installation
 
 ```bash
