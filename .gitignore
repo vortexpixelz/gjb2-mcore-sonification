@@ -194,6 +194,9 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# MCORE-1 integration exports (regenerate via code/mcore1_integration.py)
+exports/*.json
+
 # LaTeX build artifacts
 paper/*.aux
 paper/*.bbl

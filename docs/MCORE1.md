@@ -16,6 +16,10 @@ This GJB2 paper repo (`gjb2-mcore-sonification`) is the **empirical + sonificati
 - `code/checker.py` — **semigroup associativity** of the carry scan (prefix composition), not the tree checker.
 - `code/gjb2_sonification.py` — source-of-record encoder and WAV pipeline.
 - `code/analysis.py` — statistics and LaTeX fragments for the paper.
+- `code/mcore1_local.py` — local metrical-tree builder + `check_tree` (CONSERVATION / OVERFLOW / EMPTY_CONSTITUENT).
+- `code/mcore1_bridge.py` — GJB2 scan export, cascade certificates, optional `vendor/mcore-1` import.
+- `code/mcore1_integration.py` — CLI and JSON export to `exports/mcore1_gjb2.json`.
+- `tests/test_mcore1_integration.py` — parametric deletion sweep + paper reference positions (c.35 / c.235).
 
 ## When mcore-1 is available
 
@@ -27,6 +31,18 @@ pytest vendor/mcore-1/tests/test_cascade.py
 ```
 
 Then wire GJB2 CDS trits into the tree builder (or export trit weights from `dna_to_mcore_trits`) so Figure carry-cascade can be generated from checker output instead of post-hoc delta analysis alone.
+
+### Run integration now (local backend)
+
+```bash
+pip install -r code/requirements.txt
+python code/mcore1_integration.py
+python code/mcore1_integration.py --parametric   # include k=1..30 sweep in JSON
+python code/mcore1_integration.py --cascade-only 35
+python -m unittest tests.test_mcore1_integration -v
+```
+
+With `vendor/mcore-1` checked out, the bridge auto-selects `mcore1.check_tree` from upstream; otherwise `mcore1_local` is used (printed as `Tree backend: local`).
 
 ## If the GitHub URL 404s
 
