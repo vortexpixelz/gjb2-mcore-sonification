@@ -16,15 +16,11 @@ Python 3.10 or newer is required.
 python code/analysis.py
 ```
 
-Then compile the manuscript:
+Then compile the manuscript locally (`cd paper && pdflatex …`) or in **Overleaf** — see [paper/OVERLEAF.md](paper/OVERLEAF.md).
 
-```bash
-cd paper
-pdflatex main.tex
-bibtex main
-pdflatex main.tex
-pdflatex main.tex
-```
+## Project management (Linear)
+
+Issues and milestones for the paper live in Linear: [LINEAR.md](LINEAR.md) · [GJB2 MCORE-1 Sonification Paper](https://linear.app/vortexpixel-solo-dev-env/project/gjb2-mcore-1-sonification-paper-ff8daf33552c). Start with **VOR-110** (Overleaf GitHub import).
 
 ## Reproduce the audio
 
