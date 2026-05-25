@@ -66,7 +66,8 @@ indistinguishable from wildtype ($\chi^2 = \ChiSqCThirtyFive$,
 $p = \PCThirtyFive$; $\chi^2 = \ChiSqCTwoThirtyFive$,
 $p = \PCTwoThirtyFive$).  That joint outcome---marginal invariance plus
 sequential sensitivity---is the expected signature of a carry-dependent
-encoder and is the quantity that binary nucleotide parity discards.
+encoder and is the quantity that naive binary nucleotide parity does not
+natively represent without auxiliary sequential state.
 \end{abstract}
 
 \begin{keyword}
@@ -98,14 +99,21 @@ is the consequence for error detection.  Because carry threads through the
 entire downstream encoding, a single-base deletion desynchronises the
 carry trajectory and therefore perturbs most of the remaining trit stream
 (Theorem~\ref{thm:cascade}).  A binary nucleotide parity encoder can
-reproduce this behaviour only by explicitly maintaining the same carry
-register---at which point it has become a ternary encoder with extra steps.
+match this sensitivity only by attaching explicit sequential state---at
+which point it has adopted the same information structure under a less
+compact representation.
 
-\textit{GJB2} (Connexin~26) provides a well-characterised stress test:
-two recurrent pathogenic frameshift deletions, c.35delG (most common in
-Europeans~\cite{beach2020gjb2}) and c.235delC (most common in East
-Asians~\cite{mese2007gap}), are both single-base deletions in a 681-bp
-coding sequence with a public reference \cite{ncbi_nm004004}.
+\textit{GJB2} (Connexin~26) provides a well-characterised stress test.
+We deliberately pair c.35delG (rs80338943), the predominant European
+recessive deafness allele~\cite{beach2020gjb2}, with c.235delC
+(rs80338939), the dominant East Asian allele~\cite{mese2007gap}: same
+lesion class (one-base deletion), different population spectra and
+breakpoint geometry.  Under prefix alignment, c.35delG yields
+\TotalDiffCThirtyFive{} total trit mismatches versus
+\TotalDiffCTwoThirtyFive{} for c.235delC, with first divergence at
+positions~\FirstDiffCThirtyFive{} and~\FirstDiffCTwoThirtyFive{}
+respectively.  The reference CDS (681~bp) is public
+\cite{ncbi_nm004004}.
 
 The acoustic mapping is not metaphor.  Gabor's original theory of
 communication \cite{gabor1946theory} identified Gaussian-modulated
@@ -144,6 +152,47 @@ log $(c_i)$, the original sequence is recoverable: $v(b_i) + \epsilon_T(b_i)
 = u_i - c_i = 3c_{i+1} + t_i - c_i$, and since the right-hand side is
 determined, so is $b_i$.
 \end{remark}
+
+\subsection{Transducer formalization}
+\label{sec:transducer}
+
+MCORE-1 is a deterministic finite-state transducer over the DNA alphabet.
+Let the hidden state space be $Q=\mathbb{N}$ (carry value), with initial
+state $q_1=0$.  The input alphabet is $\Sigma=\{A,C,G,T\}$; the output
+alphabet is $\{0,1,2\}$.  The transition-output function
+$\delta: Q\times\Sigma \to Q\times\{0,1,2\}$ is induced by
+\eqref{eq:encoder}: writing $\delta(q,b)=(q',t)$,
+\begin{equation}
+  u = v(b) + q + \epsilon_T(b), \quad t = u \bmod 3, \quad q' = \lfloor u/3\rfloor.
+\end{equation}
+Scanning $b_1,\ldots,b_n$ yields output $(t_i)$ and terminal carry $q_{n+1}$.
+Prefix composition is associative on carry state
+(\texttt{code/checker.py} verifies that encoding a concatenation equals
+encoding the left segment and then the right segment from the terminal
+carry).  Variant comparison in Section~\ref{sec:gjb2} uses two independent
+runs of this transducer on aligned prefixes, each starting at $q_1=0$.
+
+\subsection{The $T$-specific increment and sensitivity}
+\label{sec:tbias}
+
+The map $v$ assigns $A$ and $T$ the same base weight ($0$), yet $T$ receives
+an extra $+1$ through $\epsilon_T$.  This is a deliberate symmetry break,
+not an accident of notation: without $\epsilon_T$, purine/pyrimidine
+collapses would over-identify $A$ and $T$ in the modular residue stream.
+In the present implementation, $T$ acts as a local phase tag on top of
+the shared zero class---an algebraic analogue of treating thymine as a
+termination-biased symbol in coding scans (biological motivation), while
+full \emph{inevitability} of assigning the break to $T$ rather than $A$
+remains an open optimization problem (Section~\ref{sec:open}).
+
+Sensitivity analysis on GJB2 (Table~\ref{tab:controls}) shows that removing
+$\epsilon_T$ while keeping trit output raises downstream $\rho$ from
+\DensAfterCThirtyFive{} to \NoTBonusDensCThirtyFive{} for c.35delG (and
+\DensAfterCTwoThirtyFive{} to \NoTBonusDensCTwoThirtyFive{} for c.235delC),
+but still below plain DNA frameshift (\PlainDensCThirtyFive{},
+\PlainDensCTwoThirtyFive{}).  The increment is therefore material to the
+representation layer, even where carry propagation alone does not change
+$\rho$ under independent full-prefix re-encoding.
 
 \begin{definition}[Constituent tree and conservation]
 A \emph{constituent} is an internal node $n$ with children $c_1,\ldots,c_k$
@@ -251,23 +300,48 @@ removing one base from 681 moves the marginal $\{0,1,2\}$ frequencies by
 at most $1/681 \approx 0.15\%$.  Interpreting $p\approx 1$ as ``no signal''
 conflates a marginal statistic with the sequential object of interest.
 
-\subsection{Global trit distributions and downstream mismatch contrast}
+\subsection{Global trit distributions}
 
-Table~\ref{tab:summary} reports trit counts and two downstream mismatch
-densities $\rho$ for each variant.  \emph{Plain frameshift} $\rho$ counts
-nucleotide disagreements at the same index after deletion, treating the
-two strings as raw character arrays.  \emph{MCORE carry} $\rho$ counts
-trit disagreements under independent re-encoding from $c_1=0$.
+Table~\ref{tab:summary} reports marginal trit counts and global
+goodness-of-fit against wildtype.  Histogram invariance is expected;
+the sequential statistics below carry the variant signal.
 
 \input{figures/summary_table.tex}
 
-The $\sim$15 percentage point gap between plain frameshift
-($\PlainDensCThirtyFive$, $\PlainDensCTwoThirtyFive$) and MCORE carry
-($\DensAfterCThirtyFive$, $\DensAfterCTwoThirtyFive$) is the quantified
-main result: naive same-index nucleotide comparison overstates divergence
-because it has no carry register to absorb coincidental symbol matches.
-The carry register mediates partial re-synchronisation events that reduce
-the observed mismatch rate below the raw frameshift baseline.
+\subsection{Control models for downstream mismatch density}
+\label{sec:controls}
+
+The information-bearing statistic is downstream mismatch density
+$\rho$: the fraction of prefix-aligned positions \emph{strictly after}
+the deletion coordinate at which wildtype and mutant disagree under a
+stated comparison model (Table~\ref{tab:controls}).
+
+\input{figures/controls_table.tex}
+
+Four models isolate layers of the encoder:
+\begin{enumerate}
+  \item \textbf{Plain DNA} --- same-index nucleotide inequality (naive
+    frameshift readout).
+  \item \textbf{Trit, no carry} --- $t_i = (v(b_i)+\epsilon_T(b_i))\bmod 3$
+    with $c_i\equiv 0$; memoryless ternary map.
+  \item \textbf{MCORE carry} --- full \eqref{eq:encoder}.
+  \item \textbf{No $\varepsilon_T$} --- carry-free trits with $v$ only.
+\end{enumerate}
+
+On GJB2, the dominant contrast is between plain DNA ($\rho\approx 0.75$)
+and any trit-level model ($\rho\approx 0.61$): the $\sim$15 percentage
+point gap in Table~\ref{tab:summary} is therefore primarily a
+\emph{representation} effect (nucleotide versus trit readout under prefix
+alignment), not a difference between carry-on and carry-off trit scans,
+which coincide at $\rho=$\NoCarryDensCThirtyFive{} versus
+\DensAfterCThirtyFive{} for c.35delG and
+\NoCarryDensCTwoThirtyFive{} versus \DensAfterCTwoThirtyFive{} for
+c.235delC.  Removing $\varepsilon_T$ increases $\rho$ toward, but not to,
+the DNA baseline.  Carry nonetheless governs prefix compositionality
+(Section~\ref{sec:transducer}) and the tree-level cascade in
+Theorem~\ref{thm:cascade}; $\rho$ under independent re-encoding is not,
+by itself, a carry-isolation statistic---a point we state explicitly to
+avoid over-interpreting Table~\ref{tab:controls}.
 
 \subsection{Carry cascade: sequential mismatch profile}
 
@@ -293,9 +367,9 @@ Figures~\ref{fig:carry} and~\ref{fig:delta}.
   \centering
   \includegraphics[width=0.85\linewidth]{figures/carry_downstream_density.png}
   \caption{Rolling mean (window 10) of the per-position trit mismatch
-    indicator downstream of each deletion.  The near-zero upstream region
-    and sustained downstream density match the prediction of
-    Theorem~\ref{thm:cascade}.}
+    indicator downstream of each deletion.  Upstream values are near zero;
+    downstream rolling means plateau at $\approx\DensAfterCThirtyFive$
+    (c.35delG) and $\approx\DensAfterCTwoThirtyFive$ (c.235delC).}
   \label{fig:carry}
 \end{figure}
 
@@ -430,7 +504,9 @@ peculiarity of GJB2.  It is a direct consequence of Theorem~\ref{thm:cascade}:
 the carry register is a form of sequential memory, and any perturbation
 at position $k$ propagates that memory forward through the rest of the
 sequence.  Binary encoders without an explicit carry register cannot
-reproduce this behaviour; they are architecturally blind to it.
+reproduce this behaviour without explicitly tracking an equivalent carry
+register; the divergence is less compactly observable in a binary
+readout.
 
 \subsection{Prior work in genomic sonification}
 
@@ -467,6 +543,13 @@ is an open question (Section~\ref{sec:open}).
     effects.  A closed-form correction as a function of $\sigma / T_w$
     (Gaussian width relative to window length) would make the bound
     quantitatively tight.
+  \item \textbf{$T$-bias necessity.}  Characterise $\epsilon_T$ as the
+    minimiser of a stated conservation or decoding-error functional, or
+    document empirical inferiority of symmetric breaks at $A$, $C$, and
+    $G$ under the GJB2 controls.
+  \item \textbf{Carry-sensitive observables.}  Identify statistics beyond
+    independent-prefix $\rho$ for which carry-on and carry-off trajectories
+    diverge (e.g.\ compositional encoding, re-start carry mid-sequence).
   \item \textbf{Tonotopic bandwidth robustness.}  At what minimum carrier
     separation does Corollary~\ref{cor:tonotopic} fail?  An ERB sweep from
     20 to 200\,Hz would characterise the margin.
@@ -482,8 +565,9 @@ is an open question (Section~\ref{sec:open}).
 % ─────────────────────────────────────────────────────────────────────────────
 
 MCORE-1 carries sequential variant information in a channel that binary
-nucleotide encoders are architecturally unable to expose without explicit
-carry bookkeeping.  For the two classical GJB2 deletions, global trit
+nucleotide encoders do not natively expose: reproducing the same
+downstream sensitivity requires explicit auxiliary state and a chosen
+lift from $\{0,1\}$ to trit-plus-carry dynamics.  For the two classical GJB2 deletions, global trit
 histograms are indistinguishable from wildtype---as they must be---while
 carry-mediated trit trajectories diverge across the majority of downstream
 positions.  The synthesis atoms satisfy the Gabor uncertainty bound, and

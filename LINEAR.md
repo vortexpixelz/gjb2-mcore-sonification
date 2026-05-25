@@ -13,7 +13,7 @@ Track manuscript and Overleaf work in Linear (team **Vortexpixel-solo-dev-env**)
 |----|-------|--------|
 | [VOR-110](https://linear.app/vortexpixel-solo-dev-env/issue/VOR-110/set-up-overleaf-project-github-sync) | Set up Overleaf project (GitHub sync) | Todo |
 | [VOR-107](https://linear.app/vortexpixel-solo-dev-env/issue/VOR-107/regenerate-analysis-statstex-before-each-overleaf-compile) | Regenerate `analysis_stats.tex` before compile | Todo |
-| [VOR-108](https://linear.app/vortexpixel-solo-dev-env/issue/VOR-108/journal-submission-checklist-figures-pdf-audio-supplement) | Journal submission checklist | Backlog |
+| [VOR-108](https://linear.app/vortexpixel-solo-dev-env/issue/VOR-108/journal-submission-checklist-figures-pdf-audio-supplement) | Journal submission checklist (controls table done) | In Progress |
 | [VOR-109](https://linear.app/vortexpixel-solo-dev-env/issue/VOR-109/unify-mcore-1-tree-checker-with-gjb2-pipeline) | Unify mcore-1 tree checker | Backlog |
 
 ## Workflow
