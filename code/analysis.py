@@ -416,15 +416,18 @@ def main() -> None:
             "coordinate under prefix alignment: plain frameshift compares nucleotides at the same "
             "index; MCORE carry compares independently re-encoded trits.}\n"
         )
-        f.write("\\begin{tabular}{lrrrrrrrr}\n")
-        f.write("\\hline\n")
+        f.write("\\small\n")
+        f.write("\\setlength{\\tabcolsep}{4pt}\n")
+        f.write("\\resizebox{\\textwidth}{!}{%\n")
+        f.write("\\begin{tabular}{@{}lrrrrrrrr@{}}\n")
+        f.write("\\toprule\n")
         f.write(
-            "Sequence & Length (bp) & Trit 0 & Trit 1 & Trit 2 & $\\chi^2$ vs WT & $p$-value & "
-            "Plain frameshift $\\rho$ & MCORE carry $\\rho$ \\\\\n"
+            "Sequence & Len. & $n_0$ & $n_1$ & $n_2$ & $\\chi^2$ & $p$ & "
+            "Plain $\\rho$ & MCORE $\\rho$ \\\\\n"
         )
-        f.write("\\hline\n")
+        f.write("\\midrule\n")
         f.write(
-            row_tex("Wildtype (NM\\_004004.6 CDS)", len(wt), c_wt, "---", "---", "---", "---")
+            row_tex("Wildtype", len(wt), c_wt, "---", "---", "---", "---")
         )
         f.write(
             row_tex(
@@ -448,8 +451,9 @@ def main() -> None:
                 f"{r235['carry_density_after_site']:.3f}",
             )
         )
-        f.write("\\hline\n")
-        f.write("\\end{tabular}\n")
+        f.write("\\bottomrule\n")
+        f.write("\\end{tabular}%\n")
+        f.write("}\n")
         f.write("\\end{table}\n")
 
     # Persist numeric results for LaTeX \\input (optional)

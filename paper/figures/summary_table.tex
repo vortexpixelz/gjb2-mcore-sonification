@@ -3,13 +3,17 @@
 \centering
 \label{tab:summary}
 \caption{Trit distribution statistics for GJB2 wildtype and pathogenic variants. Downstream mismatch densities $\rho$ count disagreements strictly after the deletion coordinate under prefix alignment: plain frameshift compares nucleotides at the same index; MCORE carry compares independently re-encoded trits.}
-\begin{tabular}{lrrrrrrrr}
-\hline
-Sequence & Length (bp) & Trit 0 & Trit 1 & Trit 2 & $\chi^2$ vs WT & $p$-value & Plain frameshift $\rho$ & MCORE carry $\rho$ \\
-\hline
-Wildtype (NM\_004004.6 CDS) & 681 & 158 & 342 & 181 & --- & --- & --- & --- \\
+\small
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lrrrrrrrr@{}}
+\toprule
+Sequence & Len. & $n_0$ & $n_1$ & $n_2$ & $\chi^2$ & $p$ & Plain $\rho$ & MCORE $\rho$ \\
+\midrule
+Wildtype & 681 & 158 & 342 & 181 & --- & --- & --- & --- \\
 c.35delG & 680 & 158 & 342 & 180 & 0.0041 & $9.980 \times 10^{-1}$ & 0.752 & 0.605 \\
 c.235delC & 680 & 158 & 341 & 181 & 0.0015 & $9.993 \times 10^{-1}$ & 0.755 & 0.613 \\
-\hline
-\end{tabular}
+\bottomrule
+\end{tabular}%
+}
 \end{table}

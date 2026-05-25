@@ -1,13 +1,22 @@
 \documentclass[preprint,12pt]{elsarticle}
 
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{textcomp}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{adjustbox}
+\usepackage{microtype}
 \usepackage[hidelinks]{hyperref}
+\usepackage{url}
 
 \journal{}
 
 \input{figures/analysis_stats.tex}
+
+\emergencystretch=2em
 
 \begin{document}
 
@@ -177,7 +186,6 @@ MCORE-1 trit encoding combined with Gabor-atom synthesis provides a reproducible
 \section*{Acknowledgments}
 The author thanks the NCBI for maintaining public access to NM\_004004.6 and the ClinVar database for variant clinical significance annotations.
 
-\nocite{gu2021baab047}
 \bibliographystyle{elsarticle-num}
 \bibliography{references}
 
