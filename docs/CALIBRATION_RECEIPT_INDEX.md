@@ -21,7 +21,7 @@ Process exit code: **0** · `failed_mandatory_criteria`: **none** · `invariant_
 - guards: {'length_681': True, 'starts_atg': True, 'g_at_c35': True, 'c_at_c235': True}
 
 ## Commit SHAs (run provenance)
-- gjb2:   `eca1608186f46a0d3db1c346c6662fc9526dd26a` (branch `claude/code-work-order-execution-1jzzr6`, dirty=False)
+- gjb2:   `e34176ea3d45865dc1f6235c6eb333c160aa7bd2` (branch `claude/code-work-order-execution-1jzzr6`, dirty=False)
 - mcore-1: `14252ebccf3283c42a845dc01a166e3c8cac65a6` (branch `claude/code-work-order-execution-1jzzr6`)
 
 _This index is committed in the immediately following commit; the receipts above were generated at the gjb2 SHA shown._
@@ -51,8 +51,8 @@ _This index is committed in the immediately following commit; the receipts above
 | `calibration.json` | `580bebbaa7d508aaf9b9bc0251970d7dea5227ead31531f35b25780ab046e10b` |
 | `deletion_shapes.jsonl` | `ff22b29a2858d5fc4528818ca5ed235d89ee87ebde240fdab900756209a7f9d0` |
 | `node_results.csv` | `80d4e6ba5fdccb4cb27ce26d83672c884aaf950bbdb9918f928baa86c274b6b1` |
-| `summary.md` | `7e8201c9fe243a4922ffef96cc6aeb40529ee32774ed9d58e5104174f34fde3a` |
-| `implementation_gjb2.patch` | `ca56a9b57791a474f33fbf40989b0da6be3e63a6673bca17207e7000ba658c55` |
+| `summary.md` | `0ea20dcc72381bd7303e44a07971024807e28fdd508e643010eae79243ddc3b9` |
+| `implementation_gjb2.patch` | `88b003146103d565742c101754c2d80c7c093fa6b1afeef30d70ffef7399d72a` |
 | `implementation_mcore1.patch` | `4353941b5140223e7fe6ee73c3a43498a19bcf48162641168a54024eb870eb87` |
 | `run_manifest.json` | _(not self-hashed; contains a run timestamp)_ |
 
