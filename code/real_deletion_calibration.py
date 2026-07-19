@@ -569,9 +569,12 @@ def mandatory_violations(
                 v.append(f"dna:{a}:signatures_unstable")
     if cross_check:
         sig = cross_check.get("signatures", {})
+        # Enforce each signature kind independently (receipt equality would in
+        # practice imply the others, but we do not rely on that implication).
         for a in ALLELES:
-            if not sig.get(a, {}).get("receipt_signature_equal", False):
-                v.append(f"cross_check:{a}:dna_audio_signature_mismatch")
+            for kind in ("receipt", "topology", "geometry"):
+                if not sig.get(a, {}).get(f"{kind}_signature_equal", False):
+                    v.append(f"cross_check:{a}:{kind}_signature_mismatch")
         # Raw trit-stream equality is mandatory: shape-signature equality alone
         # does not prove the audio encodes the verified DNA streams.
         for name, cmp in cross_check.get("streams", {}).items():
@@ -740,7 +743,11 @@ def build_acceptance(
         sig = cross_check.get("signatures", {})
         crit["dna_audio_cross_check_equal"] = (
             "pass"
-            if all(sig.get(a, {}).get("receipt_signature_equal") for a in ALLELES)
+            if all(
+                sig.get(a, {}).get(f"{kind}_signature_equal")
+                for a in ALLELES
+                for kind in ("receipt", "topology", "geometry")
+            )
             else "fail"
         )
         streams = cross_check.get("streams", {})
@@ -977,7 +984,7 @@ def _render_summary(
     ]
     if audio_ok:
         lines += [
-            "## Audio lane (committed audio-artifact-derived; biological-reference cross-check pending)",
+            f"## Audio lane — {audio['label']}",
             "",
             f"WT frames: {audio['wt_frames']} · WT min decode margin: {audio['wt_min_margin']:.4f}",
             "",

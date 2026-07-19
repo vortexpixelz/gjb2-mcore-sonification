@@ -13,6 +13,7 @@ from real_deletion_calibration import (
     ALLELES,
     ReferenceGuardError,
     ReferenceUnavailable,
+    build_acceptance,
     compute_shape_bundle,
     cross_check_streams,
     encoder_equivalence,
@@ -311,6 +312,34 @@ def test_raw_stream_mismatch_is_mandatory_even_with_equal_shapes() -> None:
     v = mandatory_violations(dna, audio, cross)
     assert "cross_check:stream:c35delG_delta:raw_mismatch" in v
     assert not any("signature_mismatch" in x for x in v)  # shapes were "equal"
+
+
+@pytest.mark.parametrize("kind", ["topology", "geometry"])
+def test_signature_kinds_enforced_independently(kind) -> None:
+    """receipt equal but topology/geometry unequal must still hard-fail the gate."""
+    dna, audio = _stub_lane_dna(), _stub_lane_audio()
+    sig = {
+        a: {
+            "receipt_signature_equal": True,
+            "topology_signature_equal": True,
+            "geometry_signature_equal": True,
+        }
+        for a in ALLELES
+    }
+    sig["c35delG"][f"{kind}_signature_equal"] = False  # receipt stays True
+    streams = {
+        name: {"equal": True}
+        for name in ("wt", "c35delG_delta", "c35delG_mut", "c235delC_delta", "c235delC_mut")
+    }
+    cross = {"signatures": sig, "streams": streams}
+
+    v = mandatory_violations(dna, audio, cross)
+    assert f"cross_check:c35delG:{kind}_signature_mismatch" in v
+    assert not any("receipt_signature_mismatch" in x for x in v)  # receipt was equal
+    assert not any("raw_mismatch" in x for x in v)  # streams were equal
+
+    ac = build_acceptance(dna, audio, "loaded", cross)
+    assert ac["dna_audio_cross_check_equal"] == "fail"
 
 
 @pytest.mark.skipif(
