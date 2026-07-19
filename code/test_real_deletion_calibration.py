@@ -10,18 +10,24 @@ import pytest
 
 import gjb2_encoding
 from real_deletion_calibration import (
+    ALLELES,
     ReferenceGuardError,
     ReferenceUnavailable,
     compute_shape_bundle,
+    cross_check_streams,
     encoder_equivalence,
     linear_controls,
     load_reference_cds,
     main,
+    mandatory_violations,
     resolve_mcore1,
     run_audio_lane,
 )
 
-AUDIO = Path(__file__).resolve().parent.parent / "audio"
+REPO = Path(__file__).resolve().parent.parent
+AUDIO = REPO / "audio"
+REF_FASTA = REPO / "data" / "refseq" / "NM_004004.6.fasta"
+EXPECTED_CDS_SHA = "4e200a0cd3e11879057fe0a2557e25de6925934e798e63ca4dc9235dec08907a"
 FIXED_DNA_30 = "ACGTACGTACGTACGTACGTACGTACGTAC"
 
 
@@ -37,6 +43,12 @@ def _fake_cds() -> str:
 def _clear_ref_env(monkeypatch):
     monkeypatch.delenv("GJB2_CDS_FASTA", raising=False)
     monkeypatch.delenv("GJB2_CDS_SHA256", raising=False)
+    # Neutralize the committed vendored reference so fail-closed tests are
+    # deterministic; tests that need it pass an explicit --fasta.
+    monkeypatch.setattr(
+        "real_deletion_calibration.VENDORED_REF",
+        Path("/tmp/nonexistent-vendored-ref-xyz.fasta"),
+    )
 
 
 def _write_fasta(path: Path, seq: str, header: str = ">NM_004004.6") -> Path:
@@ -228,3 +240,95 @@ def test_cli_expected_hash_mismatch_exit2(tmp_path) -> None:
     assert rc == 2
     m = _manifest(out)
     assert m["reference_status"] == "reference_guard_failed"
+
+
+# --- raw trit-stream cross-check (stronger than shape equality) -------------
+
+
+def test_cross_check_streams_detects_raw_mismatch() -> None:
+    dna_raw = {
+        "wt": [0, 1, 2, 0],
+        "mut": {"c35delG": [0, 1, 2], "c235delC": [0, 1, 2]},
+        "delta": {"c35delG": [0, 0, 0], "c235delC": [0, 0, 0]},
+    }
+    audio_raw = {
+        "wt": [0, 1, 2, 0],
+        "mut": {"c35delG": [0, 1, 2], "c235delC": [0, 1, 2]},
+        "delta": {"c35delG": [0, 1, 0], "c235delC": [0, 0, 0]},  # c35delG delta differs @1
+    }
+    xc = cross_check_streams(dna_raw, audio_raw)
+    assert xc["wt"]["equal"] is True
+    assert xc["c235delC_delta"]["equal"] is True
+    assert xc["c35delG_delta"]["equal"] is False
+    assert xc["c35delG_delta"]["mismatch_count"] == 1
+    assert xc["c35delG_delta"]["first_mismatch_index0"] == 1
+    assert xc["c35delG_delta"]["dna_sha256"] != xc["c35delG_delta"]["audio_sha256"]
+    assert len(xc["wt"]["dna_sha256"]) == 64
+
+
+def _stub_lane_dna() -> dict:
+    eq = {"trits_match": True, "all_carry_in_zero": True, "all_carry_out_zero": True}
+    return {
+        "status": "completed",
+        "encoder_equivalence": {"wt": eq, "c35delG": eq, "c235delC": eq},
+        "shapes": {a: {"signatures_stable": True} for a in ALLELES},
+    }
+
+
+def _stub_lane_audio() -> dict:
+    return {
+        "status": "completed",
+        "codec": {
+            a: {
+                "delta_matches_wt_derived_delta": True,
+                "reconstructed_mutant_matches_wt_minus_column": True,
+            }
+            for a in ALLELES
+        },
+        "shapes": {a: {"signatures_stable": True} for a in ALLELES},
+    }
+
+
+def test_raw_stream_mismatch_is_mandatory_even_with_equal_shapes() -> None:
+    """A raw-stream difference must fail the gate even if the shape layer is 'equal'."""
+    dna, audio = _stub_lane_dna(), _stub_lane_audio()
+    signatures = {
+        a: {
+            "receipt_signature_equal": True,
+            "topology_signature_equal": True,
+            "geometry_signature_equal": True,
+        }
+        for a in ALLELES
+    }
+    streams = {
+        "wt": {"equal": True},
+        "c35delG_delta": {"equal": False},  # only the raw stream diverges
+        "c35delG_mut": {"equal": True},
+        "c235delC_delta": {"equal": True},
+        "c235delC_mut": {"equal": True},
+    }
+    cross = {"signatures": signatures, "streams": streams}
+    v = mandatory_violations(dna, audio, cross)
+    assert "cross_check:stream:c35delG_delta:raw_mismatch" in v
+    assert not any("signature_mismatch" in x for x in v)  # shapes were "equal"
+
+
+@pytest.mark.skipif(
+    not (AUDIO / "gjb2_wildtype.wav").exists() or not REF_FASTA.exists(),
+    reason="committed audio or verified reference absent",
+)
+def test_cli_full_run_raw_streams_equal_exit0(tmp_path) -> None:
+    out = tmp_path / "out"
+    rc = main(["--fasta", str(REF_FASTA), "--expected-cds-sha256", EXPECTED_CDS_SHA, "--out", str(out)])
+    assert rc == 0
+    m = _manifest(out)
+    assert m["acceptance_criteria"]["dna_audio_raw_streams_equal"] == "pass"
+    assert m["acceptance_criteria"]["dna_audio_cross_check_equal"] == "pass"
+    assert m["failed_mandatory_criteria"] == []
+    cal = json.loads((out / "calibration.json").read_text())
+    streams = cal["cross_check"]["streams"]
+    assert len(streams) == 5  # wt + 2 alleles x (delta, mutant)
+    assert all(c["equal"] for c in streams.values())
+    assert all(c["mismatch_count"] == 0 for c in streams.values())
+    # WT decoded audio stream hash == DNA WT stream hash
+    assert streams["wt"]["dna_sha256"] == streams["wt"]["audio_sha256"]

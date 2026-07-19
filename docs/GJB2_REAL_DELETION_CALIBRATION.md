@@ -117,12 +117,21 @@ spectral energies `(E_win − E_runner_up)/E_win ∈ [0,1]` (these are Goertzel
 powers, not probabilities).
 
 The committed artifacts are the WT stream (681 frames) and per-allele **delta**
-streams (680 frames). The round trip decodes WT and delta **independently**,
-checks the decoded delta against the WT-derived delta, and reconstructs the
-mutant `mut[i] = (wt[i] + delta[i]) mod 3`, which must equal WT with the deleted
-column removed. Reconstructed WT/mutant streams then feed `check_deletion`, and
-the resulting deletion-shape signatures are compared to the DNA lane when a
-reference is present. Source WAVs are never overwritten.
+streams (680 frames). The round trip decodes WT and delta **independently** and
+reconstructs the mutant `mut[i] = (wt[i] + delta[i]) mod 3`.
+
+When the DNA lane runs, the cross-check enforces **both** levels of equality, and
+either failing is a mandatory non-zero-exit failure:
+
+1. **Exact raw trit streams.** Decoded audio WT == `mcore_1.dna_to_trits(cds)`;
+   decoded audio delta == the DNA-derived prefix-index delta; audio-reconstructed
+   mutant == the DNA-derived mutant — for both alleles. The manifest records each
+   stream's DNA and audio SHA-256, lengths, mismatch count, and first mismatch
+   index. (Shape-signature equality alone is insufficient: different trit streams
+   can in principle collapse to the same validator shape.)
+2. **Validator signatures.** receipt, topology, and geometry signatures all equal.
+
+Source WAVs are never overwritten.
 
 ## Results
 

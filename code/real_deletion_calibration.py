@@ -60,6 +60,8 @@ MANIFEST_VERSION = "gjb2.calibration.manifest/2"
 ARTIFACT_ID = "SPLAT-GJB2-CAL-001"
 ACCESSION = "NM_004004.6"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+# Vendored reference lookup path (module constant so tests can neutralize it).
+VENDORED_REF = REPO_ROOT / "data" / "refseq" / "NM_004004.6.fasta"
 
 ALLELES: dict[str, dict[str, Any]] = {
     "c35delG": {"pos_1": 35, "ref_base": "G"},
@@ -212,9 +214,7 @@ def load_reference_cds(
     env_path = os.environ.get("GJB2_CDS_FASTA")
     if env_path:
         candidates.append(("env_fasta", env_path))
-    candidates.append(
-        ("vendored_fasta", str(REPO_ROOT / "data" / "refseq" / "NM_004004.6.fasta"))
-    )
+    candidates.append(("vendored_fasta", str(VENDORED_REF)))
 
     tried: list[str] = []
     for mode, path in candidates:
@@ -401,11 +401,18 @@ def run_dna_lane(cds: str, mcore1: Any, local_mod: Any, repeats: int) -> dict[st
         for name, seq in variants.items()
     }
     wt_trits, _ = mcore1.dna_to_trits(cds)
+    wt_trits = list(wt_trits)
     shapes: dict[str, Any] = {}
+    raw: dict[str, Any] = {"wt": wt_trits, "mut": {}, "delta": {}}
     for allele, meta in ALLELES.items():
         mut_trits, _ = mcore1.dna_to_trits(variants[allele])
-        shapes[allele] = compute_shape_bundle(wt_trits, list(mut_trits), meta["pos_1"], mcore1, repeats)
-        shapes[allele]["controls"] = linear_controls(wt_trits, list(mut_trits), meta["pos_1"])
+        mut_trits = list(mut_trits)
+        # DNA-derived prefix-index delta (same array index), matching the delta WAV.
+        delta = [(mut_trits[i] - wt_trits[i]) % 3 for i in range(len(mut_trits))]
+        raw["mut"][allele] = mut_trits
+        raw["delta"][allele] = delta
+        shapes[allele] = compute_shape_bundle(wt_trits, mut_trits, meta["pos_1"], mcore1, repeats)
+        shapes[allele]["controls"] = linear_controls(wt_trits, mut_trits, meta["pos_1"])
     return {
         "lane": "dna",
         "status": "completed",
@@ -413,6 +420,8 @@ def run_dna_lane(cds: str, mcore1: Any, local_mod: Any, repeats: int) -> dict[st
         "encoder_equivalence": equivalence,
         "shapes": shapes,
         "cross_allele": _cross_allele_flags(shapes),
+        "streams": _stream_meta(raw),
+        "_raw": raw,  # in-memory only; popped before serialization
     }
 
 
@@ -425,11 +434,14 @@ def run_audio_lane(audio_dir: Path, mcore1: Any, repeats: int) -> dict[str, Any]
     files = {"c35delG": "gjb2_delta_c35delG.wav", "c235delC": "gjb2_delta_c235delC.wav"}
     shapes: dict[str, Any] = {}
     codec: dict[str, Any] = {}
+    raw: dict[str, Any] = {"wt": wt, "mut": {}, "delta": {}}
     for allele, fname in files.items():
         k = ALLELES[allele]["pos_1"]
         d = decode_wav_to_trits(str(audio_dir / fname), expected_frames=680)
         delta = list(d.trits)
         mut = [(wt[i] + delta[i]) % 3 for i in range(len(delta))]
+        raw["delta"][allele] = delta
+        raw["mut"][allele] = mut
         mut_from_wt = wt[: k - 1] + wt[k:]
         expected_delta = [(mut_from_wt[i] - wt[i]) % 3 for i in range(len(mut_from_wt))]
         codec[allele] = {
@@ -448,16 +460,21 @@ def run_audio_lane(audio_dir: Path, mcore1: Any, repeats: int) -> dict[str, Any]
     return {
         "lane": "audio",
         "status": "completed",
+        # Label is updated in main() once (and if) the DNA raw-stream + signature
+        # cross-check completes; until then it stays "pending".
         "label": "committed audio-artifact-derived; biological-reference cross-check pending",
         "wt_frames": wt_res.n_frames,
         "wt_min_margin": wt_res.min_margin,
         "codec": codec,
         "shapes": shapes,
         "cross_allele": _cross_allele_flags(shapes),
+        "streams": _stream_meta(raw),
+        "_raw": raw,  # in-memory only; popped before serialization
     }
 
 
 def cross_check_lanes(dna: dict[str, Any], audio: dict[str, Any]) -> dict[str, Any]:
+    """Signature-level DNA<->audio comparison (receipt/topology/geometry)."""
     out: dict[str, Any] = {}
     for allele in ALLELES:
         da, au = dna["shapes"][allele], audio["shapes"][allele]
@@ -469,13 +486,66 @@ def cross_check_lanes(dna: dict[str, Any], audio: dict[str, Any]) -> dict[str, A
     return out
 
 
+def _sha_trits(stream: list[int]) -> str:
+    return hashlib.sha256(bytes(stream)).hexdigest()  # trits are 0/1/2
+
+
+def _stream_meta(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Per-stream sha256 + length for the receipt."""
+    meta = {"wt": {"sha256": _sha_trits(raw["wt"]), "length": len(raw["wt"])}}
+    for allele in ALLELES:
+        meta[f"{allele}_mut"] = {
+            "sha256": _sha_trits(raw["mut"][allele]),
+            "length": len(raw["mut"][allele]),
+        }
+        meta[f"{allele}_delta"] = {
+            "sha256": _sha_trits(raw["delta"][allele]),
+            "length": len(raw["delta"][allele]),
+        }
+    return meta
+
+
+def _stream_cmp(a: list[int], b: list[int]) -> dict[str, Any]:
+    """Exact stream comparison with hashes, lengths, mismatch count + first index."""
+    n = min(len(a), len(b))
+    first = next((i for i in range(n) if a[i] != b[i]), None)
+    if first is None and len(a) != len(b):
+        first = n
+    mismatch_count = sum(1 for i in range(n) if a[i] != b[i]) + abs(len(a) - len(b))
+    return {
+        "equal": a == b,
+        "dna_length": len(a),
+        "audio_length": len(b),
+        "dna_sha256": _sha_trits(a),
+        "audio_sha256": _sha_trits(b),
+        "mismatch_count": mismatch_count,
+        "first_mismatch_index0": first,
+    }
+
+
+def cross_check_streams(dna_raw: dict[str, Any], audio_raw: dict[str, Any]) -> dict[str, Any]:
+    """Exact raw trit-stream DNA<->audio comparison (WT, per-allele delta + mutant).
+
+    Establishes the *stronger* claim that the committed audio decodes to the same
+    trit streams the verified CDS encodes — not merely that validator shapes agree
+    (different streams can collapse to the same shape).
+    """
+    out: dict[str, Any] = {"wt": _stream_cmp(dna_raw["wt"], audio_raw["wt"])}
+    for allele in ALLELES:
+        out[f"{allele}_delta"] = _stream_cmp(dna_raw["delta"][allele], audio_raw["delta"][allele])
+        out[f"{allele}_mut"] = _stream_cmp(dna_raw["mut"][allele], audio_raw["mut"][allele])
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Mandatory-invariant enforcement
 # ---------------------------------------------------------------------------
 
 
 def mandatory_violations(
-    dna: dict[str, Any] | None, audio: dict[str, Any] | None
+    dna: dict[str, Any] | None,
+    audio: dict[str, Any] | None,
+    cross_check: dict[str, Any] | None,
 ) -> list[str]:
     """Return human-readable names of violated mandatory invariants (empty = ok)."""
     v: list[str] = []
@@ -497,16 +567,16 @@ def mandatory_violations(
         for a in ALLELES:
             if not dna["shapes"][a]["signatures_stable"]:
                 v.append(f"dna:{a}:signatures_unstable")
-    if (
-        dna
-        and dna.get("status") == "completed"
-        and audio
-        and audio.get("status") == "completed"
-    ):
-        xc = cross_check_lanes(dna, audio)
+    if cross_check:
+        sig = cross_check.get("signatures", {})
         for a in ALLELES:
-            if not xc[a]["receipt_signature_equal"]:
+            if not sig.get(a, {}).get("receipt_signature_equal", False):
                 v.append(f"cross_check:{a}:dna_audio_signature_mismatch")
+        # Raw trit-stream equality is mandatory: shape-signature equality alone
+        # does not prove the audio encodes the verified DNA streams.
+        for name, cmp in cross_check.get("streams", {}).items():
+            if not cmp["equal"]:
+                v.append(f"cross_check:stream:{name}:raw_mismatch")
     return v
 
 
@@ -604,6 +674,7 @@ def build_acceptance(
     dna: dict[str, Any] | None,
     audio: dict[str, Any] | None,
     reference_status: str,
+    cross_check: dict[str, Any] | None,
 ) -> dict[str, str]:
     dna_ok = bool(dna and dna.get("status") == "completed")
     audio_ok = bool(audio and audio.get("status") == "completed")
@@ -664,16 +735,24 @@ def build_acceptance(
     else:
         crit["wav_codec_self_consistent"] = "skipped"
 
-    # DNA<->audio cross-check
-    if dna_ok and audio_ok:
-        xc = cross_check_lanes(dna, audio)  # type: ignore[arg-type]
+    # DNA<->audio cross-check: signatures AND exact raw trit streams.
+    if dna_ok and audio_ok and cross_check:
+        sig = cross_check.get("signatures", {})
         crit["dna_audio_cross_check_equal"] = (
-            "pass" if all(xc[a]["receipt_signature_equal"] for a in ALLELES) else "fail"
+            "pass"
+            if all(sig.get(a, {}).get("receipt_signature_equal") for a in ALLELES)
+            else "fail"
+        )
+        streams = cross_check.get("streams", {})
+        crit["dna_audio_raw_streams_equal"] = (
+            "pass" if streams and all(c["equal"] for c in streams.values()) else "fail"
         )
     elif dna_ok or audio_ok:
         crit["dna_audio_cross_check_equal"] = "pending_reference"
+        crit["dna_audio_raw_streams_equal"] = "pending_reference"
     else:
         crit["dna_audio_cross_check_equal"] = "skipped"
+        crit["dna_audio_raw_streams_equal"] = "skipped"
     return crit
 
 
@@ -685,6 +764,7 @@ MANDATORY_CRITERIA = (
     "carry_logs_zero",
     "wav_codec_self_consistent",
     "dna_audio_cross_check_equal",
+    "dna_audio_raw_streams_equal",
 )
 
 
@@ -805,7 +885,7 @@ def write_receipts(
             if fp.exists():
                 implementation_file_hashes[f"{name}:{rel}"] = sha256_file(fp)
 
-    acceptance = build_acceptance(dna, audio, reference_status)
+    acceptance = build_acceptance(dna, audio, reference_status, cross_check)
     manifest = {
         "artifact_id": ARTIFACT_ID,
         "schema_versions": {
@@ -938,14 +1018,24 @@ def _render_summary(
             f"(hash_verified={reference.get('hash_verified')})"
         )
         lines.append("")
+        sigxc = (cross_check or {}).get("signatures", {})
         lines.append("| allele | k | invalid nodes | geometry_signature | matches audio (receipt) |")
         lines.append("|---|---|---|---|---|")
         for a in ALLELES:
             s = dna["shapes"][a]
-            m = (cross_check or {}).get(a, {}).get("receipt_signature_equal")
+            m = sigxc.get(a, {}).get("receipt_signature_equal")
             lines.append(
                 f"| {a} | {s['deletion_pos_1']} | {s['shape']['invalid_node_count']} | "
                 f"`{s['geometry_signature'][:16]}…` | {m} |"
+            )
+        strxc = (cross_check or {}).get("streams", {})
+        if strxc:
+            all_eq = all(c["equal"] for c in strxc.values())
+            lines.append("")
+            lines.append(
+                f"Exact raw trit-stream equality (WT + per-allele delta + mutant): "
+                f"**{all_eq}** across {len(strxc)} streams "
+                f"(total mismatches {sum(c['mismatch_count'] for c in strxc.values())})."
             )
     else:
         lines += [
@@ -1009,7 +1099,10 @@ def main(argv: list[str] | None = None) -> int:
         dna = run_dna_lane(cds, mcore1, local_mod, args.repeats)
         reference_status = "loaded"
         if audio and audio.get("status") == "completed":
-            cross_check = cross_check_lanes(dna, audio)
+            cross_check = {
+                "signatures": cross_check_lanes(dna, audio),
+                "streams": cross_check_streams(dna["_raw"], audio["_raw"]),
+            }
     except ReferenceUnavailable as exc:
         reference = {"status": "halted_at_reference_gate", "detail": str(exc), "accession": ACCESSION}
         print(f"[dna] REFERENCE GATE — halted: {exc}")
@@ -1020,7 +1113,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[dna] REFERENCE GUARD FAILED (supplied but invalid): {exc}")
 
     audio_for_receipt = audio if (audio and audio.get("status") == "completed") else None
-    violations = mandatory_violations(dna, audio_for_receipt)
+    violations = mandatory_violations(dna, audio_for_receipt, cross_check)
+
+    # Dynamically resolve the audio-lane label now that the cross-check is known.
+    if audio_for_receipt is not None:
+        if cross_check is None:
+            pass  # no DNA lane → keep "biological-reference cross-check pending"
+        elif any(v.startswith("cross_check") for v in violations):
+            audio_for_receipt["label"] = (
+                "committed audio-artifact-derived; DNA cross-check FAILED "
+                "(see invariant_violations)"
+            )
+        else:
+            audio_for_receipt["label"] = (
+                "committed audio-artifact-derived; verified equal to the NM_004004.6 "
+                "DNA lane (exact raw trit streams + validator signatures)"
+            )
+
+    # Strip in-memory raw streams before serialization (their sha256/length live in
+    # each lane's "streams" block and the cross_check).
+    for lane in (dna, audio_for_receipt):
+        if lane is not None:
+            lane.pop("_raw", None)
 
     manifest = write_receipts(
         out_dir,
