@@ -61,7 +61,9 @@ Interpretation and limits: this is a **real-data calibration**, not validation. 
 
 ## Data
 
-NM\_004004.6 is fetched live from NCBI via E-utilities when you run the scripts; no local FASTA file is required for reproduction.
+The **legacy sonification/analysis scripts** (`code/gjb2_sonification.py`, `code/audio_analysis.py`) fetch NM\_004004.6 live from NCBI via E-utilities and fall back to an embedded demonstration sequence if the network is unavailable; no local FASTA is required for those.
+
+The **real-deletion calibration** (`code/real_deletion_calibration.py`) is deliberately stricter and **fail-closed**: it never uses the embedded fallback and requires a verified 681-bp NM\_004004.6 CDS supplied via `--fasta`, `$GJB2_CDS_FASTA`, or `data/refseq/NM_004004.6.fasta` (NCBI egress is blocked in its execution environment). Without one, its DNA lane halts at the reference gate.
 
 ## License
 

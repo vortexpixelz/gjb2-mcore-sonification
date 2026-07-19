@@ -6,20 +6,29 @@ the two real GJB2 single-base deletions, plus a committed-WAV codec round trip.
 
 Repository boundary
 -------------------
-* ``mcore-1`` is the source of record for the DNA→trit encoder, the metrical
+* ``mcore-1`` is the source of record for the DNA->trit encoder, the metrical
   tree validator (``check_deletion``), and the generic deletion-shape schema.
 * This module (in ``gjb2-mcore-sonification``) owns the NM_004004.6 reference
   handling, variant construction, the calibration run, and the receipts.
 
-Fail-closed reference
----------------------
-The DNA lane requires the verified 681-bp NM_004004.6 CDS. It is loaded through
-a strict path (explicit ``--fasta`` / ``$GJB2_CDS_FASTA`` / vendored
-``data/refseq/NM_004004.6.fasta``). The embedded demonstration fallback in
-``gjb2_sonification.py`` is **never** used here. If no verified reference is
-available the DNA lane halts at the reference gate; the audio lane still runs
-and is clearly labeled "committed audio-artifact-derived; biological-reference
-cross-check pending".
+Dependency-free execution path
+------------------------------
+The runner imports only the Python standard library plus ``mcore_1`` (pure
+Python) and the local pure-stdlib ``gjb2_encoding`` / ``wav_decode`` modules. It
+does **not** import the heavy ``gjb2_sonification`` module (numpy/scipy);
+``test_gjb2_encoding.py`` pins ``gjb2_encoding`` against the sonifier's encoder.
+
+Fail-closed reference & enforced invariants
+-------------------------------------------
+The DNA lane requires the verified 681-bp NM_004004.6 CDS via a strict path
+(``--fasta`` / ``$GJB2_CDS_FASTA`` / vendored ``data/refseq/NM_004004.6.fasta``);
+the embedded demonstration fallback is never used. A *supplied but invalid*
+reference (guard or expected-hash mismatch) is a hard failure; *no* reference
+halts the DNA lane at the gate. Mandatory scientific invariants — signature
+stability, upstream/local encoder equivalence, zero carry, WAV codec
+self-consistency, and (when the DNA lane runs) DNA<->audio signature equality —
+raise :class:`CalibrationInvariantError` and force a non-zero exit; the receipt
+is still written recording the failure.
 
 Claim tier: real-data calibration / probe, not biological mechanism, clinical
 utility, broad validation, or LLM-hallucination determinism. Observed geometry
@@ -34,9 +43,9 @@ import hashlib
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -46,38 +55,41 @@ REPO_ROOT = CODE_DIR.parent
 if str(CODE_DIR) not in sys.path:
     sys.path.insert(0, str(CODE_DIR))
 
-CALIBRATION_VERSION = "gjb2.real_deletion_calibration/1"
-MANIFEST_VERSION = "gjb2.calibration.manifest/1"
+CALIBRATION_VERSION = "gjb2.real_deletion_calibration/2"
+MANIFEST_VERSION = "gjb2.calibration.manifest/2"
 ARTIFACT_ID = "SPLAT-GJB2-CAL-001"
 ACCESSION = "NM_004004.6"
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
-# Biological constants for the two modeled alleles (1-based CDS coordinates).
 ALLELES: dict[str, dict[str, Any]] = {
     "c35delG": {"pos_1": 35, "ref_base": "G"},
     "c235delC": {"pos_1": 235, "ref_base": "C"},
 }
 
 
-# ---------------------------------------------------------------------------
-# mcore-1 import shim + provenance (amendment: validate mcore_1.__file__)
-# ---------------------------------------------------------------------------
-
-
 class ReferenceUnavailable(RuntimeError):
-    """Raised when no verified reference CDS can be loaded (fail closed)."""
+    """No verified reference CDS could be loaded (soft: DNA lane halts at gate)."""
 
 
 class ReferenceGuardError(ValueError):
-    """Raised when a candidate reference fails the strict structural guards."""
+    """A *supplied* reference failed the strict structural or hash guards (hard)."""
+
+
+class CalibrationInvariantError(RuntimeError):
+    """A mandatory scientific invariant was violated (forces non-zero exit)."""
+
+
+# ---------------------------------------------------------------------------
+# mcore-1 import shim + strict provenance
+# ---------------------------------------------------------------------------
 
 
 def resolve_mcore1() -> tuple[Any, dict[str, Any]]:
-    """Import ``mcore_1`` (source of record) and validate the loaded file path.
+    """Import ``mcore_1`` and require it to resolve to the intended checkout.
 
-    A sibling ``../mcore-1/src`` (or ``$MCORE1_SRC``) is added to ``sys.path`` if
-    the package is not already importable — never copying either repo into the
-    other. The resolved ``mcore_1.__file__`` is recorded and checked so a stale
-    installed package cannot be used silently.
+    Only the sibling ``../mcore-1/src`` (or an explicit ``$MCORE1_SRC``) is
+    accepted; any other resolved ``mcore_1.__file__`` (site-packages or a foreign
+    checkout) is rejected so a stale package cannot silently be used.
     """
     sibling_src = Path(os.environ.get("MCORE1_SRC", REPO_ROOT.parent / "mcore-1" / "src"))
     try:
@@ -89,26 +101,25 @@ def resolve_mcore1() -> tuple[Any, dict[str, Any]]:
 
     loaded = Path(mcore_1.__file__).resolve()
     expected = (sibling_src / "mcore_1" / "__init__.py").resolve()
-    is_expected = loaded == expected
-    repo_root = loaded.parents[2] if len(loaded.parents) >= 3 else None
     info = {
         "file": str(loaded),
-        "expected_sibling_src_init": str(expected),
-        "is_expected_sibling_src": is_expected,
-        "repo_root": str(repo_root) if repo_root else None,
+        "expected_init": str(expected),
+        "is_expected": loaded == expected,
+        "mcore1_src": str(sibling_src),
         "in_site_packages": "site-packages" in str(loaded),
     }
-    if not is_expected and info["in_site_packages"]:
+    if loaded != expected:
         raise RuntimeError(
-            "mcore_1 resolved to an installed site-packages copy "
-            f"({loaded}); set MCORE1_SRC to the intended src to avoid a stale "
-            "package. Expected sibling src: " + str(expected)
+            "mcore_1 must resolve exactly under the intended sibling src or "
+            f"$MCORE1_SRC.\n  loaded:   {loaded}\n  expected: {expected}\n"
+            "Set MCORE1_SRC to the intended mcore-1/src (or install it editable "
+            "from there) so a stale or foreign checkout cannot be used."
         )
     return mcore_1, info
 
 
 # ---------------------------------------------------------------------------
-# Hash helpers
+# Hash / time helpers
 # ---------------------------------------------------------------------------
 
 
@@ -129,12 +140,29 @@ def iso_now() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Strict, fail-closed reference loader (amendment 3: dual hashes, kinds)
+# Strict, fail-closed reference loader
 # ---------------------------------------------------------------------------
 
 
-def _parse_fasta(text: str) -> str:
-    return "".join(ln.strip() for ln in text.splitlines() if not ln.startswith(">")).upper()
+def _parse_fasta(raw: bytes) -> str:
+    """Strictly parse a single-record FASTA into an A/C/G/T-only sequence."""
+    try:
+        text = raw.decode("utf-8")  # strict: no error suppression
+    except UnicodeDecodeError as exc:
+        raise ReferenceGuardError(f"reference is not valid UTF-8: {exc}") from exc
+    lines = text.splitlines()
+    headers = [ln for ln in lines if ln.startswith(">")]
+    if len(headers) != 1:
+        raise ReferenceGuardError(
+            f"expected exactly one FASTA record, found {len(headers)}"
+        )
+    seq = "".join(ln.strip() for ln in lines if not ln.startswith(">")).upper()
+    if not seq:
+        raise ReferenceGuardError("empty FASTA sequence")
+    bad = sorted({c for c in seq if c not in "ACGT"})
+    if bad:
+        raise ReferenceGuardError(f"non-ACGT characters in reference: {bad}")
+    return seq
 
 
 def _extract_cds(seq: str) -> tuple[str, str, str]:
@@ -150,48 +178,15 @@ def _extract_cds(seq: str) -> tuple[str, str, str]:
     )
 
 
-def _guard_and_provenance(
-    cds: str,
-    full_seq: str,
-    *,
-    retrieval_mode: str,
-    source_path: str,
-    raw_bytes: bytes,
-    input_kind: str,
-    extraction: str,
-    expected_cds_sha: str | None,
-) -> dict[str, Any]:
-    guards = {
-        "length_681": len(cds) == 681,
-        "starts_atg": cds[:3] == "ATG",
-        "g_at_c35": len(cds) > 34 and cds[34] == "G",
-        "c_at_c235": len(cds) > 234 and cds[234] == "C",
-    }
-    if not all(guards.values()):
-        raise ReferenceGuardError(f"reference guards failed: {guards}")
-    cds_sha = sha256_text(cds)
-    hash_verified = expected_cds_sha is not None and expected_cds_sha == cds_sha
-    return {
-        "accession": ACCESSION,
-        "retrieval_mode": retrieval_mode,
-        "retrieval_time_utc": iso_now(),
-        "source_path": source_path,
-        "input_kind": input_kind,  # "cds" | "full_transcript"
-        "cds_extraction": extraction,  # "identity" | "slice_179_859"
-        "raw_file_sha256": sha256_bytes(raw_bytes),
-        "raw_sequence_length": len(full_seq),
-        "cds_length": len(cds),
-        "cds_sha256": cds_sha,
-        "hash_recorded": True,
-        "hash_verified": hash_verified,
-        "expected_cds_sha256": expected_cds_sha,
-        "guards": guards,
-        "note": (
-            "hash_recorded means this run computed and stored the CDS hash; "
-            "hash_verified is True only when an expected hash was supplied and "
-            "matched. NCBI egress is blocked in this environment."
-        ),
-    }
+def _normalize_expected_sha(expected: str | None) -> str | None:
+    if expected is None:
+        return None
+    norm = expected.strip().lower()
+    if not _SHA256_RE.match(norm):
+        raise ReferenceGuardError(
+            f"--expected-cds-sha256 must be 64 hex chars; got {expected!r}"
+        )
+    return norm
 
 
 def load_reference_cds(
@@ -199,10 +194,18 @@ def load_reference_cds(
     *,
     expected_cds_sha: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Load the verified 681-bp CDS, or raise :class:`ReferenceUnavailable`.
+    """Load the verified 681-bp CDS, or raise. Never uses the embedded fallback.
 
-    Never uses the embedded demonstration fallback.
+    Raises
+    ------
+    ReferenceUnavailable
+        No candidate reference file exists (soft: DNA lane halts at the gate).
+    ReferenceGuardError
+        A candidate exists but fails parsing, structural guards, or a supplied
+        expected-hash check (hard failure).
     """
+    expected_norm = _normalize_expected_sha(expected_cds_sha)
+
     candidates: list[tuple[str, str]] = []
     if fasta_path:
         candidates.append(("explicit_fasta", fasta_path))
@@ -219,18 +222,49 @@ def load_reference_cds(
         if not os.path.exists(path):
             continue
         raw = Path(path).read_bytes()
-        seq = _parse_fasta(raw.decode("utf-8", "ignore"))
+        seq = _parse_fasta(raw)
         cds, kind, extraction = _extract_cds(seq)
-        prov = _guard_and_provenance(
-            cds,
-            seq,
-            retrieval_mode=mode,
-            source_path=path,
-            raw_bytes=raw,
-            input_kind=kind,
-            extraction=extraction,
-            expected_cds_sha=expected_cds_sha,
-        )
+
+        guards = {
+            "length_681": len(cds) == 681,
+            "starts_atg": cds[:3] == "ATG",
+            "g_at_c35": cds[34] == "G",
+            "c_at_c235": cds[234] == "C",
+        }
+        if not all(guards.values()):
+            raise ReferenceGuardError(f"reference guards failed: {guards}")
+
+        cds_sha = sha256_text(cds)
+        hash_verified = False
+        if expected_norm is not None:
+            if expected_norm != cds_sha:
+                raise ReferenceGuardError(
+                    "supplied --expected-cds-sha256 does not match the loaded CDS "
+                    f"({expected_norm} != {cds_sha})"
+                )
+            hash_verified = True
+
+        prov = {
+            "accession": ACCESSION,
+            "retrieval_mode": mode,
+            "retrieval_time_utc": iso_now(),
+            "source_path": path,
+            "input_kind": kind,
+            "cds_extraction": extraction,
+            "raw_file_sha256": sha256_bytes(raw),
+            "raw_sequence_length": len(seq),
+            "cds_length": len(cds),
+            "cds_sha256": cds_sha,
+            "hash_recorded": True,
+            "hash_verified": hash_verified,
+            "expected_cds_sha256": expected_norm,
+            "guards": guards,
+            "note": (
+                "hash_recorded means this run computed and stored the CDS hash; "
+                "hash_verified is True only when a matching expected hash was "
+                "supplied (a mismatch raises). NCBI egress is blocked here."
+            ),
+        }
         return cds, prov
 
     raise ReferenceUnavailable(
@@ -241,23 +275,21 @@ def load_reference_cds(
 
 
 # ---------------------------------------------------------------------------
-# Encoder equivalence + validator geometry
+# Encoding / validator geometry (invariants recorded, enforced centrally)
 # ---------------------------------------------------------------------------
 
 
 def encoder_equivalence(seq: str, mcore1: Any, local_encoder: Callable) -> dict[str, Any]:
-    """Compare upstream (mcore_1) vs local trit streams; assert zero carry."""
+    """Compare upstream (mcore_1) vs local trit streams; record zero-carry."""
     up_trits, up_log = mcore1.dna_to_trits(seq)
     loc_trits = list(local_encoder(seq))
     match = up_trits == loc_trits
     first_mismatch = None
     if not match:
-        for i, (a, b) in enumerate(zip(up_trits, loc_trits)):
-            if a != b:
-                first_mismatch = i
-                break
-        if first_mismatch is None:
-            first_mismatch = min(len(up_trits), len(loc_trits))
+        first_mismatch = next(
+            (i for i, (a, b) in enumerate(zip(up_trits, loc_trits)) if a != b),
+            min(len(up_trits), len(loc_trits)),
+        )
     return {
         "length": len(seq),
         "trits_match": match,
@@ -270,8 +302,9 @@ def encoder_equivalence(seq: str, mcore1: Any, local_encoder: Callable) -> dict[
 def compute_shape_bundle(
     wt_trits: list[int], mut_trits: list[int], k: int, mcore1: Any, repeats: int
 ) -> dict[str, Any]:
-    """Run check_deletion + summarize *repeats* times; assert stable signatures."""
+    """Run check_deletion + summarize *repeats* times; record signature stability."""
     receipts: set[str] = set()
+    topologies: set[str] = set()
     geometries: set[str] = set()
     canon: set[str] = set()
     shape = None
@@ -281,6 +314,7 @@ def compute_shape_bundle(
             rows, deletion_pos_1=k, wt_length=len(wt_trits), mutant_length=len(mut_trits)
         )
         receipts.add(shape.receipt_signature())
+        topologies.add(shape.topology_signature())
         geometries.add(shape.geometry_signature())
         canon.add(shape.to_canonical_json())
     assert shape is not None
@@ -288,15 +322,20 @@ def compute_shape_bundle(
     records = mcore1.node_records(
         rows, deletion_pos_1=k, wt_length=len(wt_trits), mutant_length=len(mut_trits)
     )
+    stable = (
+        len(receipts) == 1 and len(topologies) == 1 and len(geometries) == 1 and len(canon) == 1
+    )
     return {
         "deletion_pos_1": k,
         "wt_length": len(wt_trits),
         "mutant_length": len(mut_trits),
         "repeats": repeats,
         "receipt_signature": shape.receipt_signature(),
+        "topology_signature": shape.topology_signature(),
         "geometry_signature": shape.geometry_signature(),
-        "signatures_stable": len(receipts) == 1 and len(geometries) == 1 and len(canon) == 1,
+        "signatures_stable": stable,
         "shape": shape.to_receipt_dict(),
+        "topology": shape.to_topology_dict(),
         "geometry": shape.to_geometry_dict(),
         "node_records": [r.to_dict() for r in records],
     }
@@ -307,11 +346,9 @@ def linear_controls(wt_trits: list[int], mut_trits: list[int], k: int) -> dict[s
     m = len(mut_trits)
     n = len(wt_trits)
     prefix_div = [i for i in range(m) if wt_trits[i] != mut_trits[i]]
-
     GAP = -1
     restored = list(mut_trits[: k - 1]) + [GAP] + list(mut_trits[k - 1 :])  # length n
     gap_div = [j for j in range(n) if j != (k - 1) and wt_trits[j] != restored[j]]
-
     return {
         "prefix_index": {
             "label": "deletion-induced suffix shear (displacement-sensitive comparison)",
@@ -341,12 +378,13 @@ def _cross_allele_flags(shapes: dict[str, Any]) -> dict[str, bool]:
     a, b = shapes["c35delG"], shapes["c235delC"]
     return {
         "geometry_signature_equal": a["geometry_signature"] == b["geometry_signature"],
+        "topology_signature_equal": a["topology_signature"] == b["topology_signature"],
         "receipt_signature_equal": a["receipt_signature"] == b["receipt_signature"],
     }
 
 
 # ---------------------------------------------------------------------------
-# DNA lane / audio lane
+# Lanes
 # ---------------------------------------------------------------------------
 
 
@@ -370,6 +408,7 @@ def run_dna_lane(cds: str, mcore1: Any, local_mod: Any, repeats: int) -> dict[st
         shapes[allele]["controls"] = linear_controls(wt_trits, list(mut_trits), meta["pos_1"])
     return {
         "lane": "dna",
+        "status": "completed",
         "source": "mcore_1 encoder over verified 681-bp CDS",
         "encoder_equivalence": equivalence,
         "shapes": shapes,
@@ -400,7 +439,7 @@ def run_audio_lane(audio_dir: Path, mcore1: Any, repeats: int) -> dict[str, Any]
             "wt_mean_margin": wt_res.mean_margin,
             "delta_min_margin": d.min_margin,
             "delta_mean_margin": d.mean_margin,
-            "confidence_metric": "normalized winner margin (p_win - p_runner_up)/p_win in [0,1]",
+            "confidence_metric": "normalized winner margin (E_win - E_runner_up)/E_win in [0,1]",
             "delta_matches_wt_derived_delta": delta == expected_delta,
             "reconstructed_mutant_matches_wt_minus_column": mut == mut_from_wt,
         }
@@ -408,6 +447,7 @@ def run_audio_lane(audio_dir: Path, mcore1: Any, repeats: int) -> dict[str, Any]
         shapes[allele]["controls"] = linear_controls(wt, mut, k)
     return {
         "lane": "audio",
+        "status": "completed",
         "label": "committed audio-artifact-derived; biological-reference cross-check pending",
         "wt_frames": wt_res.n_frames,
         "wt_min_margin": wt_res.min_margin,
@@ -423,9 +463,51 @@ def cross_check_lanes(dna: dict[str, Any], audio: dict[str, Any]) -> dict[str, A
         da, au = dna["shapes"][allele], audio["shapes"][allele]
         out[allele] = {
             "receipt_signature_equal": da["receipt_signature"] == au["receipt_signature"],
+            "topology_signature_equal": da["topology_signature"] == au["topology_signature"],
             "geometry_signature_equal": da["geometry_signature"] == au["geometry_signature"],
         }
     return out
+
+
+# ---------------------------------------------------------------------------
+# Mandatory-invariant enforcement
+# ---------------------------------------------------------------------------
+
+
+def mandatory_violations(
+    dna: dict[str, Any] | None, audio: dict[str, Any] | None
+) -> list[str]:
+    """Return human-readable names of violated mandatory invariants (empty = ok)."""
+    v: list[str] = []
+    if audio and audio.get("status") == "completed":
+        for a in ALLELES:
+            if not audio["shapes"][a]["signatures_stable"]:
+                v.append(f"audio:{a}:signatures_unstable")
+            c = audio["codec"][a]
+            if not c["delta_matches_wt_derived_delta"]:
+                v.append(f"audio:{a}:delta_mismatch")
+            if not c["reconstructed_mutant_matches_wt_minus_column"]:
+                v.append(f"audio:{a}:reconstruction_mismatch")
+    if dna and dna.get("status") == "completed":
+        for name, eq in dna["encoder_equivalence"].items():
+            if not eq["trits_match"]:
+                v.append(f"dna:{name}:encoder_mismatch")
+            if not (eq["all_carry_in_zero"] and eq["all_carry_out_zero"]):
+                v.append(f"dna:{name}:nonzero_carry")
+        for a in ALLELES:
+            if not dna["shapes"][a]["signatures_stable"]:
+                v.append(f"dna:{a}:signatures_unstable")
+    if (
+        dna
+        and dna.get("status") == "completed"
+        and audio
+        and audio.get("status") == "completed"
+    ):
+        xc = cross_check_lanes(dna, audio)
+        for a in ALLELES:
+            if not xc[a]["receipt_signature_equal"]:
+                v.append(f"cross_check:{a}:dna_audio_signature_mismatch")
+    return v
 
 
 # ---------------------------------------------------------------------------
@@ -450,12 +532,34 @@ def git_meta(repo: Path) -> dict[str, Any]:
     }
 
 
-def write_tracked_patch(repo: Path, out_path: Path) -> str:
-    r = subprocess.run(
-        ["git", "-C", str(repo), "diff", "HEAD"], capture_output=True, text=True
-    )
-    out_path.write_text(r.stdout, encoding="utf-8")
-    return sha256_file(out_path)
+def write_branch_patch(repo: Path, out_path: Path, base_ref: str = "origin/main") -> dict[str, Any]:
+    """Diff the PR branch against its merge-base with *base_ref*.
+
+    Unlike ``git diff HEAD`` (working tree only, empty once the branch is
+    committed clean), this captures the full base->head change set as a
+    reproducible receipt keyed by commit SHAs.
+    """
+    def g(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+    head = g("rev-parse", "HEAD").stdout.strip()
+    merge_base = g("merge-base", "HEAD", base_ref).stdout.strip()
+    if merge_base:
+        diff = g("diff", merge_base, "HEAD").stdout
+        base_used, mode = merge_base, f"merge-base(HEAD, {base_ref})..HEAD"
+    else:
+        diff = g("diff", "HEAD").stdout
+        base_used, mode = "", "working_tree(HEAD) [merge-base unavailable]"
+    out_path.write_text(diff, encoding="utf-8")
+    return {
+        "path": out_path.name,
+        "sha256": sha256_file(out_path),
+        "base_ref": base_ref,
+        "base_sha": base_used,
+        "head_sha": head,
+        "compare_range": f"{base_used}..{head}" if base_used else "HEAD (working tree)",
+        "mode": mode,
+    }
 
 
 def dep_versions() -> dict[str, str | None]:
@@ -476,7 +580,7 @@ CLAIM_TIER = {
         "strict 681/ATG/G@c.35/C@c.235 reference guards (no silent fallback)",
         "validator NodeResult output via check_deletion",
         "carry-inert DNA mapping (executable invariant)",
-        "repeatable deletion-shape receipt + geometry signatures (UUID-independent)",
+        "repeatable deletion-shape receipt/topology/geometry signatures (UUID-independent)",
     ],
     "supported_by_this_calibration": [
         "whether the two real deletions produce stable, inspectable error geometries",
@@ -497,28 +601,46 @@ NON_CLAIMS = [
 
 
 def build_acceptance(
-    dna: dict[str, Any] | None, audio: dict[str, Any], reference_status: str
+    dna: dict[str, Any] | None,
+    audio: dict[str, Any] | None,
+    reference_status: str,
 ) -> dict[str, str]:
-    def hashes_stable(lane: dict[str, Any]) -> bool:
-        return all(lane["shapes"][a]["signatures_stable"] for a in ALLELES)
+    dna_ok = bool(dna and dna.get("status") == "completed")
+    audio_ok = bool(audio and audio.get("status") == "completed")
 
     crit: dict[str, str] = {
         "mcore1_existing_tests_pass": "verified_out_of_band",
         "deletion_shape_tests_pass": "verified_out_of_band",
         "carry_inert_invariant_test_passes": "verified_out_of_band",
-        "strict_reference_guard_no_fallback": (
-            "pass" if dna else "halted_at_reference_gate"
-        ),
-        "both_variants_canonical_shape": "pass" if (dna or audio) else "fail",
-        "three_runs_identical_hashes": "pass" if hashes_stable(audio) and (dna is None or hashes_stable(dna)) else "fail",
-        "prefix_and_gap_controls_emitted": "pass",
+        "prefix_and_gap_controls_emitted": "pass" if (dna_ok or audio_ok) else "skipped",
         "report_not_attributing_to_carry": "pass",
         "artifacts_hashed_in_manifest": "pass",
         "committed_wavs_not_overwritten": "pass",
     }
-    # Encoder equivalence + carry logs are DNA-lane criteria.
-    if dna:
-        eq = dna["encoder_equivalence"]
+
+    # reference gate
+    if reference_status == "loaded":
+        crit["strict_reference_guard_no_fallback"] = "pass"
+    elif reference_status == "reference_guard_failed":
+        crit["strict_reference_guard_no_fallback"] = "fail"
+    else:
+        crit["strict_reference_guard_no_fallback"] = "halted_at_reference_gate"
+
+    def stable(lane: dict[str, Any]) -> bool:
+        return all(lane["shapes"][a]["signatures_stable"] for a in ALLELES)
+
+    # signature stability (over whichever lanes ran)
+    if dna_ok or audio_ok:
+        ok = (not dna_ok or stable(dna)) and (not audio_ok or stable(audio))  # type: ignore[arg-type]
+        crit["three_runs_identical_hashes"] = "pass" if ok else "fail"
+        crit["both_variants_canonical_shape"] = "pass"
+    else:
+        crit["three_runs_identical_hashes"] = "skipped"
+        crit["both_variants_canonical_shape"] = "skipped"
+
+    # encoder equivalence + carry (DNA lane)
+    if dna_ok:
+        eq = dna["encoder_equivalence"]  # type: ignore[index]
         crit["encoder_streams_match_upstream_local"] = (
             "pass" if all(v["trits_match"] for v in eq.values()) else "fail"
         )
@@ -531,39 +653,62 @@ def build_acceptance(
         crit["encoder_streams_match_upstream_local"] = "halted_at_reference_gate"
         crit["carry_logs_zero"] = "halted_at_reference_gate"
 
-    # WAV round trip: exact self-consistency now; DNA cross-check gated.
-    codec_ok = all(
-        audio["codec"][a]["delta_matches_wt_derived_delta"]
-        and audio["codec"][a]["reconstructed_mutant_matches_wt_minus_column"]
-        for a in ALLELES
-    )
-    if dna:
-        xcheck = audio.get("_cross_check", {})
-        crit["wav_roundtrip_equals_dna_shapes"] = (
-            "pass"
-            if codec_ok and all(v["geometry_signature_equal"] and v["receipt_signature_equal"] for v in xcheck.values())
-            else "fail"
+    # WAV codec self-consistency (audio lane)
+    if audio_ok:
+        codec_ok = all(
+            audio["codec"][a]["delta_matches_wt_derived_delta"]  # type: ignore[index]
+            and audio["codec"][a]["reconstructed_mutant_matches_wt_minus_column"]
+            for a in ALLELES
         )
+        crit["wav_codec_self_consistent"] = "pass" if codec_ok else "fail"
     else:
-        crit["wav_roundtrip_self_consistent"] = "pass" if codec_ok else "fail"
-        crit["wav_roundtrip_equals_dna_shapes"] = "pending_reference"
+        crit["wav_codec_self_consistent"] = "skipped"
+
+    # DNA<->audio cross-check
+    if dna_ok and audio_ok:
+        xc = cross_check_lanes(dna, audio)  # type: ignore[arg-type]
+        crit["dna_audio_cross_check_equal"] = (
+            "pass" if all(xc[a]["receipt_signature_equal"] for a in ALLELES) else "fail"
+        )
+    elif dna_ok or audio_ok:
+        crit["dna_audio_cross_check_equal"] = "pending_reference"
+    else:
+        crit["dna_audio_cross_check_equal"] = "skipped"
     return crit
+
+
+# Criteria that must not be "fail" (a non-zero exit is forced if they are).
+MANDATORY_CRITERIA = (
+    "strict_reference_guard_no_fallback",
+    "three_runs_identical_hashes",
+    "encoder_streams_match_upstream_local",
+    "carry_logs_zero",
+    "wav_codec_self_consistent",
+    "dna_audio_cross_check_equal",
+)
+
+
+def failed_mandatory_criteria(criteria: dict[str, str]) -> list[str]:
+    return [k for k in MANDATORY_CRITERIA if criteria.get(k) == "fail"]
 
 
 def write_receipts(
     out_dir: Path,
     *,
     dna: dict[str, Any] | None,
-    audio: dict[str, Any],
+    audio: dict[str, Any] | None,
+    cross_check: dict[str, Any] | None,
     reference: dict[str, Any],
     reference_status: str,
     mcore1_info: dict[str, Any],
     repos: dict[str, Any],
     commands: list[str],
+    invariant_violations: list[str],
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    lanes = [("dna", dna), ("audio", audio)]
+    present = [(name, lane) for name, lane in lanes if lane and lane.get("status") == "completed"]
 
-    # 1. calibration.json — top-level results.
     calibration = {
         "artifact_id": ARTIFACT_ID,
         "calibration_version": CALIBRATION_VERSION,
@@ -571,17 +716,15 @@ def write_receipts(
         "reference_status": reference_status,
         "dna_lane": dna,
         "audio_lane": audio,
-        "cross_check": audio.get("_cross_check"),
+        "cross_check": cross_check,
+        "invariant_violations": invariant_violations,
         "claim_tier": CLAIM_TIER,
         "non_claims": NON_CLAIMS,
     }
     (out_dir / "calibration.json").write_text(json.dumps(calibration, indent=2), encoding="utf-8")
 
-    # 2. deletion_shapes.jsonl — one line per (lane, allele).
     with (out_dir / "deletion_shapes.jsonl").open("w", encoding="utf-8") as fh:
-        for lane_name, lane in (("dna", dna), ("audio", audio)):
-            if not lane:
-                continue
+        for lane_name, lane in present:
             for allele in ALLELES:
                 s = lane["shapes"][allele]
                 fh.write(
@@ -591,9 +734,11 @@ def write_receipts(
                             "allele": allele,
                             "deletion_pos_1": s["deletion_pos_1"],
                             "receipt_signature": s["receipt_signature"],
+                            "topology_signature": s["topology_signature"],
                             "geometry_signature": s["geometry_signature"],
                             "signatures_stable": s["signatures_stable"],
                             "shape": s["shape"],
+                            "topology": s["topology"],
                             "geometry": s["geometry"],
                         },
                         sort_keys=True,
@@ -601,51 +746,39 @@ def write_receipts(
                     + "\n"
                 )
 
-    # 3. node_results.csv — all internal nodes (deterministic, UUID-free).
     with (out_dir / "node_results.csv").open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(
-            [
-                "lane", "allele", "post_rank", "node_id", "leaf_lo", "leaf_hi",
-                "coordinate_width", "survivor_leaf_count", "valid", "site_class",
-                "error_kinds",
-            ]
+            ["lane", "allele", "post_rank", "node_id", "leaf_lo", "leaf_hi",
+             "coordinate_width", "survivor_leaf_count", "valid", "site_class", "error_kinds"]
         )
-        for lane_name, lane in (("dna", dna), ("audio", audio)):
-            if not lane:
-                continue
+        for lane_name, lane in present:
             for allele in ALLELES:
                 for r in lane["shapes"][allele]["node_records"]:
                     writer.writerow(
-                        [
-                            lane_name, allele, r["post_rank"], r["node_id"],
-                            r["leaf_lo"], r["leaf_hi"], r["coordinate_width"],
-                            r["survivor_leaf_count"], r["valid"], r["site_class"],
-                            "|".join(r["error_kinds"]),
-                        ]
+                        [lane_name, allele, r["post_rank"], r["node_id"], r["leaf_lo"],
+                         r["leaf_hi"], r["coordinate_width"], r["survivor_leaf_count"],
+                         r["valid"], r["site_class"], "|".join(r["error_kinds"])]
                     )
 
-    # 4. summary.md
-    (out_dir / "summary.md").write_text(_render_summary(dna, audio, reference, reference_status), encoding="utf-8")
+    (out_dir / "summary.md").write_text(
+        _render_summary(dna, audio, cross_check, reference, reference_status, invariant_violations),
+        encoding="utf-8",
+    )
 
-    # 5. patches (tracked changes) + untracked lists.
     patches: dict[str, Any] = {}
     for name, meta in repos.items():
         p = out_dir / f"implementation_{name}.patch"
-        patches[name] = {
-            "path": p.name,
-            "sha256": write_tracked_patch(Path(meta["repo"]), p),
-            "untracked_files": meta["untracked_files"],
-        }
+        info = write_branch_patch(Path(meta["repo"]), p)
+        info["untracked_files"] = meta["untracked_files"]
+        patches[name] = info
 
-    # Hash all emitted artifacts (except the manifest itself).
     artifact_hashes: dict[str, str] = {}
     for fname in ("calibration.json", "deletion_shapes.jsonl", "node_results.csv", "summary.md"):
         artifact_hashes[fname] = sha256_file(out_dir / fname)
-    for name, pinfo in patches.items():
+    for pinfo in patches.values():
         artifact_hashes[pinfo["path"]] = pinfo["sha256"]
 
-    # Hash the implementation source/doc files I authored or edited.
     impl_files = {
         "mcore1": [
             "src/mcore_1/deletion_shape.py",
@@ -656,8 +789,10 @@ def write_receipts(
         "gjb2": [
             "code/real_deletion_calibration.py",
             "code/wav_decode.py",
+            "code/gjb2_encoding.py",
             "code/test_real_deletion_calibration.py",
             "code/test_wav_decode.py",
+            "code/test_gjb2_encoding.py",
             "docs/GJB2_REAL_DELETION_CALIBRATION.md",
             "README.md",
         ],
@@ -670,6 +805,7 @@ def write_receipts(
             if fp.exists():
                 implementation_file_hashes[f"{name}:{rel}"] = sha256_file(fp)
 
+    acceptance = build_acceptance(dna, audio, reference_status)
     manifest = {
         "artifact_id": ARTIFACT_ID,
         "schema_versions": {
@@ -685,13 +821,16 @@ def write_receipts(
         "repos": repos,
         "reference": reference,
         "reference_status": reference_status,
-        "dna_lane_status": "completed" if dna else "halted_at_reference_gate",
-        "audio_lane_status": "completed",
+        "dna_lane_status": (dna or {}).get("status", "skipped"),
+        "audio_lane_status": (audio or {}).get("status", "skipped"),
         "commands": commands,
         "claim_tier": CLAIM_TIER,
         "non_claims": NON_CLAIMS,
-        "acceptance_criteria": build_acceptance(dna, audio, reference_status),
-        "results_summary": _results_summary(dna, audio),
+        "acceptance_criteria": acceptance,
+        "mandatory_criteria": list(MANDATORY_CRITERIA),
+        "failed_mandatory_criteria": failed_mandatory_criteria(acceptance),
+        "invariant_violations": invariant_violations,
+        "results_summary": _results_summary(dna, audio, cross_check),
         "implementation_file_hashes": implementation_file_hashes,
         "patches": patches,
         "artifact_hashes": artifact_hashes,
@@ -706,11 +845,14 @@ def _deletion_shape_schema() -> str:
     return getattr(mod, "SCHEMA_VERSION", "unknown") if mod else "unknown"
 
 
-def _results_summary(dna: dict[str, Any] | None, audio: dict[str, Any]) -> dict[str, Any]:
+def _results_summary(
+    dna: dict[str, Any] | None, audio: dict[str, Any] | None, cross_check: dict[str, Any] | None
+) -> dict[str, Any]:
     def per_allele(lane: dict[str, Any]) -> dict[str, Any]:
         return {
             a: {
                 "receipt_signature": lane["shapes"][a]["receipt_signature"],
+                "topology_signature": lane["shapes"][a]["topology_signature"],
                 "geometry_signature": lane["shapes"][a]["geometry_signature"],
                 "invalid_node_count": lane["shapes"][a]["shape"]["invalid_node_count"],
                 "signatures_stable": lane["shapes"][a]["signatures_stable"],
@@ -718,71 +860,89 @@ def _results_summary(dna: dict[str, Any] | None, audio: dict[str, Any]) -> dict[
             for a in ALLELES
         }
 
-    out: dict[str, Any] = {"audio_lane": per_allele(audio), "audio_cross_allele": audio["cross_allele"]}
-    if dna:
+    out: dict[str, Any] = {}
+    if audio and audio.get("status") == "completed":
+        out["audio_lane"] = per_allele(audio)
+        out["audio_cross_allele"] = audio["cross_allele"]
+    if dna and dna.get("status") == "completed":
         out["dna_lane"] = per_allele(dna)
         out["dna_cross_allele"] = dna["cross_allele"]
-        out["cross_check"] = audio.get("_cross_check")
+    if cross_check:
+        out["cross_check"] = cross_check
     return out
 
 
 def _render_summary(
-    dna: dict[str, Any] | None, audio: dict[str, Any], reference: dict[str, Any], status: str
+    dna: dict[str, Any] | None,
+    audio: dict[str, Any] | None,
+    cross_check: dict[str, Any] | None,
+    reference: dict[str, Any],
+    status: str,
+    violations: list[str],
 ) -> str:
+    audio_ok = bool(audio and audio.get("status") == "completed")
+    dna_ok = bool(dna and dna.get("status") == "completed")
     lines = [
         "# GJB2 real-deletion validator calibration — summary",
         "",
         f"- Artifact: `{ARTIFACT_ID}` · calibration `{CALIBRATION_VERSION}`",
         f"- Reference status: **{status}**",
+        f"- Mandatory-invariant violations: **{len(violations)}**"
+        + (f" ({', '.join(violations)})" if violations else ""),
         "",
         "> Claim tier: real-data calibration / probe. NOT biological mechanism, "
         "clinical utility, broad validation, or LLM-hallucination determinism. "
         "Observed geometry is NOT a carry effect (the DNA mapping is carry-inert).",
         "",
-        "## Audio lane (committed audio-artifact-derived; biological-reference cross-check pending)",
-        "",
-        f"WT frames: {audio['wt_frames']} · WT min decode margin: {audio['wt_min_margin']:.4f}",
-        "",
-        "| allele | k | invalid nodes | geometry_signature | receipt_signature | codec self-consistent |",
-        "|---|---|---|---|---|---|",
     ]
-    for a in ALLELES:
-        s = audio["shapes"][a]
-        c = audio["codec"][a]
-        ok = c["delta_matches_wt_derived_delta"] and c["reconstructed_mutant_matches_wt_minus_column"]
-        lines.append(
-            f"| {a} | {s['deletion_pos_1']} | {s['shape']['invalid_node_count']} | "
-            f"`{s['geometry_signature'][:16]}…` | `{s['receipt_signature'][:16]}…` | {ok} |"
-        )
-    lines += [
-        "",
-        f"Audio cross-allele geometry equal: **{audio['cross_allele']['geometry_signature_equal']}** "
-        f"(receipt equal: {audio['cross_allele']['receipt_signature_equal']}).",
-        "",
-        "### Linear controls (per allele)",
-    ]
-    for a in ALLELES:
-        ctrl = audio["shapes"][a]["controls"]
-        lines.append(
-            f"- **{a}** — prefix-index (suffix shear) divergences: "
-            f"{ctrl['prefix_index']['divergent_count']}/{ctrl['prefix_index']['compared_positions']}; "
-            f"gap-restored (deletion-localized) divergences: "
-            f"{ctrl['gap_restored']['divergent_count']}/{ctrl['gap_restored']['compared_positions']}."
-        )
-    lines.append("")
-    lines.append("> " + audio["shapes"]["c35delG"]["controls"]["interpretation"])
-    lines.append("")
+    if audio_ok:
+        lines += [
+            "## Audio lane (committed audio-artifact-derived; biological-reference cross-check pending)",
+            "",
+            f"WT frames: {audio['wt_frames']} · WT min decode margin: {audio['wt_min_margin']:.4f}",
+            "",
+            "| allele | k | invalid nodes | geometry_signature | codec self-consistent |",
+            "|---|---|---|---|---|",
+        ]
+        for a in ALLELES:
+            s = audio["shapes"][a]
+            c = audio["codec"][a]
+            ok = c["delta_matches_wt_derived_delta"] and c["reconstructed_mutant_matches_wt_minus_column"]
+            lines.append(
+                f"| {a} | {s['deletion_pos_1']} | {s['shape']['invalid_node_count']} | "
+                f"`{s['geometry_signature'][:16]}…` | {ok} |"
+            )
+        lines += [
+            "",
+            f"Audio cross-allele geometry equal: **{audio['cross_allele']['geometry_signature_equal']}** "
+            f"(topology equal: {audio['cross_allele']['topology_signature_equal']}).",
+            "",
+            "### Linear controls (per allele)",
+        ]
+        for a in ALLELES:
+            ctrl = audio["shapes"][a]["controls"]
+            lines.append(
+                f"- **{a}** — prefix-index (suffix shear): "
+                f"{ctrl['prefix_index']['divergent_count']}/{ctrl['prefix_index']['compared_positions']}; "
+                f"gap-restored (deletion-localized): "
+                f"{ctrl['gap_restored']['divergent_count']}/{ctrl['gap_restored']['compared_positions']}."
+            )
+        lines += ["", "> " + audio["shapes"]["c35delG"]["controls"]["interpretation"], ""]
+    else:
+        lines += ["## Audio lane", "", "Skipped (`--skip-audio`).", ""]
 
-    if dna:
+    if dna_ok:
         lines += ["## DNA lane (mcore_1 encoder over verified CDS)", ""]
-        lines.append(f"Reference CDS sha256: `{reference.get('cds_sha256','?')}` (hash_verified={reference.get('hash_verified')})")
+        lines.append(
+            f"Reference CDS sha256: `{reference.get('cds_sha256', '?')}` "
+            f"(hash_verified={reference.get('hash_verified')})"
+        )
         lines.append("")
-        lines.append("| allele | k | invalid nodes | geometry_signature | matches audio |")
+        lines.append("| allele | k | invalid nodes | geometry_signature | matches audio (receipt) |")
         lines.append("|---|---|---|---|---|")
-        xc = audio.get("_cross_check", {})
         for a in ALLELES:
             s = dna["shapes"][a]
-            m = xc.get(a, {}).get("geometry_signature_equal")
+            m = (cross_check or {}).get(a, {}).get("receipt_signature_equal")
             lines.append(
                 f"| {a} | {s['deletion_pos_1']} | {s['shape']['invalid_node_count']} | "
                 f"`{s['geometry_signature'][:16]}…` | {m} |"
@@ -807,73 +967,89 @@ def _render_summary(
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(description="GJB2 real-deletion validator calibration")
     ap.add_argument("--fasta", default=None, help="Path to NM_004004.6 FASTA (transcript or 681-bp CDS)")
-    ap.add_argument("--expected-cds-sha256", default=os.environ.get("GJB2_CDS_SHA256"), help="Optional expected CDS sha256 to verify")
+    ap.add_argument("--expected-cds-sha256", default=os.environ.get("GJB2_CDS_SHA256"))
     ap.add_argument("--out", default=str(REPO_ROOT / "artifacts" / "calibration" / "gjb2-real-deletions"))
     ap.add_argument("--audio-dir", default=str(REPO_ROOT / "audio"))
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--skip-audio", action="store_true")
-    ap.add_argument("--require-reference", action="store_true", help="Exit non-zero if the DNA lane halts")
+    ap.add_argument("--require-reference", action="store_true", help="Exit non-zero if the DNA lane halts at the gate")
     args = ap.parse_args(argv)
 
     out_dir = Path(args.out)
     audio_dir = Path(args.audio_dir)
-    commands = [" ".join(["python", "code/real_deletion_calibration.py", *(argv or sys.argv[1:])])]
+    commands = [" ".join(["python", "code/real_deletion_calibration.py", *argv])]
 
     mcore1, mcore1_info = resolve_mcore1()
-    import gjb2_sonification as local_mod  # noqa: E402  (pulls numpy/scipy, both installed)
+    import gjb2_encoding as local_mod  # pure-stdlib: apply_deletion + dna_to_mcore_trits
 
-    mcore1_repo = Path(mcore1_info["repo_root"]) if mcore1_info["repo_root"] else REPO_ROOT.parent / "mcore-1"
+    mcore1_repo = Path(mcore1_info["mcore1_src"]).parent
     repos = {"gjb2": git_meta(REPO_ROOT), "mcore1": git_meta(mcore1_repo)}
 
-    # Audio lane (standalone; always attempted unless skipped).
+    # Audio lane
     if args.skip_audio:
         print("[audio] skipped (--skip-audio)")
-        audio: dict[str, Any] | None = None
+        audio: dict[str, Any] | None = {"lane": "audio", "status": "skipped"}
     else:
         print("[audio] decoding committed WAVs + validating (audio-artifact-derived)...")
         audio = run_audio_lane(audio_dir, mcore1, args.repeats)
 
-    # DNA lane (fail-closed).
+    # DNA lane (fail-closed)
     dna: dict[str, Any] | None = None
+    cross_check: dict[str, Any] | None = None
     reference_status = "halted_at_reference_gate"
+    reference: dict[str, Any]
+    hard_reference_failure = False
     try:
         cds, reference = load_reference_cds(args.fasta, expected_cds_sha=args.expected_cds_sha256)
         print(f"[dna] reference loaded ({reference['retrieval_mode']}, {reference['input_kind']}, "
-              f"cds sha256 {reference['cds_sha256'][:16]}…)")
+              f"cds sha256 {reference['cds_sha256'][:16]}…, hash_verified={reference['hash_verified']})")
         dna = run_dna_lane(cds, mcore1, local_mod, args.repeats)
         reference_status = "loaded"
-        if audio is not None:
-            audio["_cross_check"] = cross_check_lanes(dna, audio)
-    except (ReferenceUnavailable, ReferenceGuardError) as exc:
+        if audio and audio.get("status") == "completed":
+            cross_check = cross_check_lanes(dna, audio)
+    except ReferenceUnavailable as exc:
         reference = {"status": "halted_at_reference_gate", "detail": str(exc), "accession": ACCESSION}
         print(f"[dna] REFERENCE GATE — halted: {exc}")
+    except ReferenceGuardError as exc:
+        reference = {"status": "reference_guard_failed", "detail": str(exc), "accession": ACCESSION}
+        reference_status = "reference_guard_failed"
+        hard_reference_failure = True
+        print(f"[dna] REFERENCE GUARD FAILED (supplied but invalid): {exc}")
 
-    if audio is None:
-        # Nothing substantive to report without either lane; still emit a gate receipt.
-        audio = {
-            "lane": "audio", "label": "skipped", "wt_frames": 0, "wt_min_margin": 0.0,
-            "codec": {}, "shapes": {}, "cross_allele": {"geometry_signature_equal": None, "receipt_signature_equal": None},
-        }
+    audio_for_receipt = audio if (audio and audio.get("status") == "completed") else None
+    violations = mandatory_violations(dna, audio_for_receipt)
 
     manifest = write_receipts(
         out_dir,
         dna=dna,
-        audio=audio,
+        audio=audio_for_receipt,
+        cross_check=cross_check,
         reference=reference,
         reference_status=reference_status,
         mcore1_info=mcore1_info,
         repos=repos,
         commands=commands,
+        invariant_violations=violations,
     )
+    failed = manifest["failed_mandatory_criteria"]
     print(f"[receipts] wrote artifacts under {out_dir}")
     print(f"[receipts] dna_lane={manifest['dna_lane_status']} audio_lane={manifest['audio_lane_status']}")
 
-    if args.require_reference and dna is None:
+    exit_code = 0
+    if hard_reference_failure:
+        print("[exit] supplied reference failed guards/hash → non-zero exit")
+        exit_code = 2
+    if violations or failed:
+        print(f"[exit] mandatory invariant/criteria failure → non-zero exit: "
+              f"violations={violations} failed_criteria={failed}")
+        exit_code = 2
+    if args.require_reference and dna is None and not hard_reference_failure:
         print("[exit] --require-reference set and DNA lane halted → non-zero exit")
-        return 2
-    return 0
+        exit_code = 2
+    return exit_code
 
 
 if __name__ == "__main__":

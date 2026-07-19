@@ -16,8 +16,9 @@ Format contract (validated, not assumed):
 
 At sr = 48000 and frame length 1920, the carrier bins land on exact integer
 Goertzel bins (32, 64, 128), so separation is essentially perfect. The reported
-per-frame confidence is the normalized winner margin
-``(p_win - p_runner_up) / p_win`` in ``[0, 1]`` (1.0 = perfect separation).
+per-frame confidence is the normalized winner margin over spectral energies
+``(E_win - E_runner_up) / E_win`` in ``[0, 1]`` (1.0 = perfect separation). These
+are Goertzel powers/energies, not probabilities.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ class DecodeResult:
 
     path: str
     trits: tuple[int, ...]
-    margins: tuple[float, ...]  # per-frame normalized winner margin in [0, 1]
+    margins: tuple[float, ...]  # per-frame (E_win - E_runner_up)/E_win in [0, 1]
     n_frames: int
     sample_rate: int
     frame_len: int

@@ -59,14 +59,22 @@ Key properties:
   changes every run; it is **excluded** from all canonical output. Node identity
   is the deterministic span `(leaf_lo, leaf_hi)` plus post-order rank, so the
   canonical JSON and both signatures are byte-identical across repeated calls.
-- **Two signatures.**
+- **Three signatures.**
   - `receipt_signature` — SHA-256 over the **complete absolute** artifact
     (absolute spans, `k`, counts): the identity of a specific deletion's receipt.
-  - `geometry_signature` — SHA-256 over the geometry **normalized relative to
-    `k`** (offsets `lo−k`, `hi−k`, widths, survivor counts, error kinds,
-    left/contains/right class): position-independent shape identity.
-  - Geometry equality between deletions is tested with `geometry_signature`
-    **only** — never the receipt signature.
+  - `topology_signature` — SHA-256 over the geometry **relative to `k`** (offsets
+    `lo−k`, `hi−k`) but **retaining each node's post-order rank** in the whole
+    mutant tree. Because that rank counts nodes to the left of the deletion, this
+    digest is position-dependent through placement — use it for exact topological
+    identity.
+  - `geometry_signature` — SHA-256 over a **truly local, position-stripped** view:
+    a canonically sorted multiset of `k`-relative node descriptors (offsets,
+    widths, survivor counts, site class, error kinds) with **no post-order rank
+    and no post-order ordering**. Two deletions with the same local error geometry
+    share this digest regardless of where they sit in the sequence.
+  - Local-geometry equality between deletions is tested with `geometry_signature`
+    **only** — never the receipt signature; use `topology_signature` when exact
+    tree placement must also match.
 - **Coordinate semantics.** `coordinate_width = hi − lo + 1` (original-coordinate
   hull, may include the deleted site) versus `survivor_leaf_count` (surviving
   original indices under the node, never counting `k`); they differ exactly when
@@ -104,8 +112,9 @@ The committed `audio/` files encode one 40 ms Gabor frame per trit at 48 kHz,
 mono, 16-bit, single carrier per trit (`0→800, 1→1600, 2→3200` Hz). The
 pure-stdlib decoder (`code/wav_decode.py`) validates format, exact frame
 divisibility, and expected lengths, then recovers each trit by Goertzel energy
-argmax with a defined per-frame confidence = normalized winner margin
-`(p_win − p_runner_up)/p_win ∈ [0,1]`.
+argmax with a defined per-frame confidence = normalized winner margin over
+spectral energies `(E_win − E_runner_up)/E_win ∈ [0,1]` (these are Goertzel
+powers, not probabilities).
 
 The committed artifacts are the WT stream (681 frames) and per-allele **delta**
 streams (680 frames). The round trip decodes WT and delta **independently**,
@@ -137,6 +146,13 @@ lane is **fail-closed** — it halts at the reference gate unless a verified FAS
 is supplied (`--fasta` / `$GJB2_CDS_FASTA` / `data/refseq/NM_004004.6.fasta`).
 The audio lane runs regardless and is labeled **"committed audio-artifact-derived;
 biological-reference cross-check pending."**
+
+Enforced invariants (each forces a non-zero exit and is recorded in the manifest,
+distinct from a soft reference-gate halt): a *supplied* reference failing its
+guards or a supplied `--expected-cds-sha256` mismatch; unstable signatures across
+repeats; upstream/local encoder disagreement or nonzero carry; WAV codec
+self-inconsistency; and, when the DNA lane runs, DNA↔audio signature mismatch. A
+missing reference is not a failure — it is the expected fail-closed halt.
 
 On the committed audio artifacts (WT decode margin 1.0000, codec round-trip
 self-consistent):
