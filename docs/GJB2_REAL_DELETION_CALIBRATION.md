@@ -139,7 +139,14 @@ Run:
 
 ```bash
 python code/real_deletion_calibration.py            # audio lane + fail-closed DNA gate
-python code/real_deletion_calibration.py --fasta data/refseq/NM_004004.6.fasta   # full run
+
+# Canonical full run — asserts the reference digest, so hash_verified=True.
+# Omitting --expected-cds-sha256 still succeeds, but reports hash_verified=false,
+# which means "no expected digest was supplied", not "verification failed".
+# A mismatching digest exits 2 (fail-closed, DNA lane skipped).
+python code/real_deletion_calibration.py \
+  --fasta data/refseq/NM_004004.6.fasta \
+  --expected-cds-sha256 4e200a0cd3e11879057fe0a2557e25de6925934e798e63ca4dc9235dec08907a
 ```
 
 Receipts are written under `artifacts/calibration/gjb2-real-deletions/`
